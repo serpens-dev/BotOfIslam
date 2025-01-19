@@ -19,7 +19,7 @@ const client = new Client({
 
 // Bot Ready Event
 client.once(Events.ClientReady, async () => {
-  log.info('Bot ist bereit!');
+  log.info('Logged in as ${client.user?.tag}!');
 
   try {
     // Registriere Commands
@@ -42,7 +42,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleModal(interaction);
     }
   } catch (error) {
-    log.error('Fehler beim Verarbeiten der Interaktion:', error);
+    log.error(error, 'Error handling interaction');
   }
 });
 
@@ -55,5 +55,23 @@ initializeStorage({
 
 // Login
 client.login(DISCORD_BOT_TOKEN);
+
+export async function startBot() {
+  try {
+    // Initialize storage
+    initializeStorage({
+      email: process.env.MEGA_EMAIL!,
+      password: process.env.MEGA_PASSWORD!,
+      uploadFolder: process.env.MEGA_UPLOAD_FOLDER || '/recordings'
+    });
+
+    // Login to Discord
+    await client.login(DISCORD_BOT_TOKEN);
+    log.info("Bot started successfully");
+  } catch (error) {
+    log.error(error, 'Failed to start bot');
+    throw error;
+  }
+}
 
 export { client }; 
