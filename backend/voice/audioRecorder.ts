@@ -1,28 +1,18 @@
 import { 
   VoiceConnection,
-  EndBehaviorType,
-  createAudioResource,
-  createAudioPlayer,
-  AudioReceiveStream,
-  getVoiceConnection,
-  VoiceReceiver,
-  joinVoiceChannel
+  EndBehaviorType
 } from '@discordjs/voice';
 import { join } from 'path';
 import { createWriteStream, WriteStream } from 'fs';
 import { Readable } from 'stream';
-import { VoiceChannel, GuildMember } from 'discord.js';
 import { mkdir } from 'fs/promises';
 import log from "encore.dev/log";
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { getStorage } from './storage';
-import { pipeline } from 'stream/promises';
 
-// ES Module __dirname Workaround
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+interface AudioRecording {
+  audioFiles: string[];
+}
 
+// Aktive Aufnahmen mit ihren Streams
 const activeRecordings = new Map<string, {
   connection: VoiceConnection;
   userStreams: Map<string, {
@@ -31,10 +21,6 @@ const activeRecordings = new Map<string, {
     filePath: string;
   }>;
 }>();
-
-interface AudioRecording {
-  audioFiles: string[];
-}
 
 export async function startAudioRecording(connection: VoiceConnection, recordingId: string) {
   try {
