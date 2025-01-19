@@ -56,7 +56,7 @@ export const recordingCommands = [
 export async function handleRecordCommand(interaction: ChatInputCommandInteraction) {
   try {
     // Sofort bestätigen dass wir die Anfrage verarbeiten
-    await interaction.deferReply();
+    await interaction.reply('Starte Aufnahme...');
 
     const member = interaction.member as GuildMember;
     const voiceChannel = member.voice.channel;
@@ -72,14 +72,16 @@ export async function handleRecordCommand(interaction: ChatInputCommandInteracti
       initiatorId: member.id
     });
 
-    await interaction.editReply('Aufnahme gestartet!');
+    // Sende Erfolg in den Channel
+    await voiceChannel.send('🎙️ Aufnahme gestartet!');
+    await interaction.editReply('Aufnahme läuft!');
 
   } catch (error: any) {
     log.error('Fehler beim Starten der Aufnahme:', error);
     
     // Versuche Fehlermeldung zu senden
     try {
-      await interaction.editReply('Die Anwendung reagiert nicht');
+      await interaction.editReply('Aufnahme konnte nicht gestartet werden');
     } catch (e) {
       log.error('Fehler beim Senden der Fehlermeldung:', e);
     }
@@ -89,7 +91,7 @@ export async function handleRecordCommand(interaction: ChatInputCommandInteracti
 export async function handleStopRecordCommand(interaction: ChatInputCommandInteraction) {
   try {
     // Sofort bestätigen dass wir die Anfrage verarbeiten
-    await interaction.deferReply();
+    await interaction.reply('Stoppe Aufnahme...');
 
     const member = interaction.member as GuildMember;
     const voiceChannel = member.voice.channel;
@@ -113,7 +115,10 @@ export async function handleStopRecordCommand(interaction: ChatInputCommandInter
         ).join('\n')
       : '';
 
-    // Sende Erfolg mit Links
+    // Sende Erfolg in den Channel
+    await voiceChannel.send('⏹️ Aufnahme beendet!');
+    
+    // Sende Links als Follow-up
     await interaction.editReply({
       content: `Aufnahme beendet!\n\nAudio Aufnahmen:\n${audioLinks}${screenLinks}`
     });
@@ -123,7 +128,7 @@ export async function handleStopRecordCommand(interaction: ChatInputCommandInter
     
     // Versuche Fehlermeldung zu senden
     try {
-      await interaction.editReply('Die Anwendung reagiert nicht');
+      await interaction.editReply('Aufnahme konnte nicht gestoppt werden');
     } catch (e) {
       log.error('Fehler beim Senden der Fehlermeldung:', e);
     }
