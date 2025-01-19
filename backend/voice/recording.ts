@@ -51,6 +51,22 @@ const activeRecordings = new Map<string, Recording>();
 // Speichere die "Starte Aufnahme..." Nachrichten
 const startMessages = new Map<string, Message>();
 
+// Globaler Event-Handler (nur einmal registrieren)
+client.on('voiceStateUpdate', async (oldState: VoiceState, newState: VoiceState) => {
+  // Wenn es der Bot ist und er den Channel verlässt
+  if (newState.member?.user.id === client.user?.id && oldState.channelId && !newState.channelId) {
+    log.info("Bot hat den Voice Channel verlassen, beende Aufnahme...");
+    try {
+      const recording = activeRecordings.get(oldState.channelId);
+      if (recording) {
+        await stopRecording(oldState.channelId);
+      }
+    } catch (error) {
+      log.error("Fehler beim automatischen Beenden der Aufnahme:", error);
+    }
+  }
+});
+
 export async function startRecording(channelId: string, initiatorId: string): Promise<Recording> {
   try {
     log.info("Starte Aufnahmeprozess...");
@@ -128,19 +144,9 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
 
     // Update message after successful start
     await startMsg.edit("✅ Aufnahme läuft!");
-    
-    // Setup voice state update handler
-    client.on('voiceStateUpdate', async (oldState: VoiceState, newState: VoiceState) => {
-      // Wenn es der Bot ist und er den Channel verlässt
-      if (newState.member?.user.id === client.user?.id && oldState.channelId && !newState.channelId) {
-        log.info("Bot hat den Voice Channel verlassen, beende Aufnahme...");
-        try {
-          await stopRecording(oldState.channelId);
-        } catch (error) {
-          log.error("Fehler beim automatischen Beenden der Aufnahme:", error);
-        }
-      }
-    });
+
+    // Start confirmation timer
+    startConfirmationTimer(channel);
 
     return recording;
   } catch (error) {
@@ -287,33 +293,43 @@ export async function addHighlight(channelId: string, description: string, userI
 
 async function startConfirmationTimer(channel: VoiceChannel) {
   const interval = 15 * 60 * 1000; // 15 Minuten
+  const confirmationTimeout = 5 * 60 * 1000; // 5 Minuten Wartezeit für Bestätigung
 
-  setInterval(async () => {
-    const session = activeRecordings.get(channel.id);
-    if (!session) return;
+  const timer = setInterval(async () => {
+    const recording = activeRecordings.get(channel.id);
+    if (!recording) {
+      clearInterval(timer); // Timer stoppen wenn keine Aufnahme mehr aktiv
+      return;
+    }
 
-    // Prüfe ob seit der letzten Bestätigung 15 Minuten vergangen sind
-    const timeSinceLastConfirmation = new Date().getTime() - session.lastConfirmation.getTime();
-    if (timeSinceLastConfirmation >= interval) {
-      try {
-        // Frage nach Bestätigung
-        const message = await channel.send({
-          content: 'Die Aufnahme läuft seit 15 Minuten. Möchtest du fortfahren?',
-          // Hier Buttons für Ja/Nein hinzufügen
-        });
+    try {
+      // Sende Bestätigungsnachricht
+      const confirmMsg = await channel.send({
+        content: '⚠️ **Aufnahme-Check**\nDie Aufnahme läuft seit 15 Minuten. Soll sie fortgesetzt werden?',
+      });
 
-        // Warte 5 Minuten auf Antwort
-        setTimeout(async () => {
-          if (activeRecordings.has(channel.id)) {
+      // Warte 5 Minuten auf Antwort
+      setTimeout(async () => {
+        const currentRecording = activeRecordings.get(channel.id);
+        if (currentRecording && currentRecording.id === recording.id) {
+          try {
             await stopRecording(channel.id);
-            await channel.send('Aufnahme automatisch gestoppt (keine Bestätigung)');
+            await channel.send('⏹️ Aufnahme wurde automatisch beendet (keine Bestätigung nach 5 Minuten).');
+          } catch (error) {
+            log.error('Fehler beim automatischen Stoppen der Aufnahme:', error);
           }
-        }, 5 * 60 * 1000);
-      } catch (error) {
-        log.error('Fehler beim Senden der Bestätigung:', error);
-      }
+        }
+        // Lösche die Bestätigungsnachricht
+        await confirmMsg.delete().catch(() => {});
+      }, confirmationTimeout);
+
+    } catch (error) {
+      log.error('Fehler beim Senden der Bestätigung:', error);
     }
   }, interval);
+
+  // Speichere den Timer, um ihn später stoppen zu können
+  return timer;
 }
 
 async function getVoiceChannel(channelId: string): Promise<VoiceChannel> {
