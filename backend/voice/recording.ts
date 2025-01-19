@@ -22,7 +22,6 @@ import log from "encore.dev/log";
 import { client } from '../discord/bot';
 import { startAudioRecording, stopAudioRecording } from './audioRecorder';
 import { getStorage } from './storage';
-import { createHighlightClips } from './clipGenerator';
 import { VoiceDB } from './encore.service';
 import { Recording, Highlight } from "./types";
 import { getVoiceChannel as fetchVoiceChannel } from "./utils";
