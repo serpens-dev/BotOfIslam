@@ -24,6 +24,7 @@ build/
 .DS_Store
 Thumbs.db
 
+# Project specific
 encore.gen.go
 encore.gen.cue
 /.encore
@@ -34,3 +35,4 @@ voice_of_islam.png
 .cursorrules
 config.ts
 voice_of_islam.png
+recordings/
