@@ -7,6 +7,7 @@ import { createWriteStream, WriteStream } from 'fs';
 import { Readable } from 'stream';
 import { mkdir } from 'fs/promises';
 import log from "encore.dev/log";
+import { finished } from 'stream/promises';
 
 interface AudioRecording {
   audioFiles: string[];
@@ -47,37 +48,59 @@ export async function startAudioRecording(connection: VoiceConnection, recording
 
     // Start recording for each speaking user
     connection.receiver.speaking.on('start', async (userId) => {
-      const recording = activeRecordings.get(channelId);
-      if (!recording) return;
+      try {
+        const recording = activeRecordings.get(channelId);
+        if (!recording) return;
 
-      // Wenn der Benutzer bereits aufgenommen wird, ignorieren
-      if (recording.userStreams.has(userId)) return;
+        // Wenn der Benutzer bereits aufgenommen wird, ignorieren
+        if (recording.userStreams.has(userId)) return;
 
-      log.info("Benutzer beginnt zu sprechen", { userId });
-      
-      const audioStream = receiver.subscribe(userId, {
-        end: {
-          behavior: EndBehaviorType.Manual
-        }
-      });
+        log.info("Benutzer beginnt zu sprechen", { userId });
+        
+        const audioStream = receiver.subscribe(userId, {
+          end: {
+            behavior: EndBehaviorType.Manual
+          }
+        });
 
-      const fileName = `${recordingId}_${userId}.webm`;
-      const filePath = join(recordingsPath, fileName);
-      const fileStream = createWriteStream(filePath);
+        const fileName = `${recordingId}_${userId}.webm`;
+        const filePath = join(recordingsPath, fileName);
+        const fileStream = createWriteStream(filePath);
 
-      // Convert AudioReceiveStream to Node.js Readable
-      const nodeStream = Readable.from(audioStream as unknown as AsyncIterable<any>);
-      
-      recording.userStreams.set(userId, {
-        stream: nodeStream,
-        fileStream,
-        filePath
-      });
+        // Convert AudioReceiveStream to Node.js Readable
+        const nodeStream = Readable.from(audioStream as unknown as AsyncIterable<any>);
+        
+        // Fehlerbehandlung für Streams
+        nodeStream.on('error', (error) => {
+          log.error("Fehler im Audio-Stream", { userId, error });
+          if (!fileStream.destroyed) {
+            fileStream.end();
+          }
+        });
 
-      // Pipe stream to file
-      nodeStream.pipe(fileStream);
+        fileStream.on('error', (error) => {
+          log.error("Fehler beim Schreiben der Datei", { userId, error });
+          nodeStream.destroy();
+        });
 
-      log.info("Neue Audioaufnahme gestartet", { userId, filePath });
+        recording.userStreams.set(userId, {
+          stream: nodeStream,
+          fileStream,
+          filePath
+        });
+
+        // Pipe stream to file mit Fehlerbehandlung
+        nodeStream.pipe(fileStream);
+        
+        // Warte auf Stream-Ende
+        finished(nodeStream).catch((error) => {
+          log.error("Stream wurde unerwartet beendet", { userId, error });
+        });
+
+        log.info("Neue Audioaufnahme gestartet", { userId, filePath });
+      } catch (error) {
+        log.error("Fehler beim Starten der Benutzer-Aufnahme", { userId, error });
+      }
     });
 
     connection.receiver.speaking.on('end', (userId) => {
@@ -108,12 +131,23 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
     // Sammle alle Dateipfade
     const audioFiles: string[] = [];
     
-    // Beende alle Streams
+    // Beende alle Streams sicher
     for (const [userId, userStream] of recording.userStreams) {
-      userStream.stream.unpipe();
-      userStream.fileStream.end();
-      audioFiles.push(userStream.filePath);
-      log.info("Audio-Stream beendet", { userId });
+      try {
+        // Beende Stream sicher
+        userStream.stream.unpipe(userStream.fileStream);
+        userStream.stream.destroy();
+        
+        // Warte kurz um Buffer zu leeren
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Schließe Datei
+        userStream.fileStream.end();
+        audioFiles.push(userStream.filePath);
+        log.info("Audio-Stream beendet", { userId });
+      } catch (error) {
+        log.error("Fehler beim Beenden des Streams", { userId, error });
+      }
     }
 
     // Entferne alle Listener
