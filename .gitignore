@@ -1,12 +1,36 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+.encore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
 encore.gen.go
 encore.gen.cue
 /.encore
-node_modules
 /encore.gen
 das.log
 ideen.md
 voice_of_islam.png
 .cursorrules
-.env
 config.ts
 voice_of_islam.png
