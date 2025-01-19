@@ -73,17 +73,6 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
       throw new Error('Fehler beim Erstellen der Aufnahme in der Datenbank');
     }
 
-    // Starte Audio Aufnahme
-    const connection = await startAudioRecording(channel);
-    
-    // Warte kurz um sicherzustellen dass die Aufnahme initialisiert ist
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Prüfe ob die Aufnahme wirklich gestartet wurde
-    if (!activeRecordings.has(channelId)) {
-      throw new Error('Aufnahme konnte nicht gestartet werden');
-    }
-
     // Erstelle neue Aufnahme Session
     const session: RecordingSession = {
       id: row.id,
@@ -103,14 +92,22 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
       }
     };
 
-    // Speichere Session
+    // Speichere Session VOR dem Start der Aufnahme
     activeRecordings.set(channelId, session);
+
+    // Starte Audio Aufnahme
+    const connection = await startAudioRecording(channel);
+    
+    // Warte kurz um sicherzustellen dass die Aufnahme initialisiert ist
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Aktualisiere Channel Namen
     await channel.setName(`🔴 ${channel.name}`);
 
     return session;
   } catch (error) {
+    // Bei Fehler Session wieder entfernen
+    activeRecordings.delete(channelId);
     log.error('Fehler beim Starten der Aufnahme:', error);
     throw error;
   }
