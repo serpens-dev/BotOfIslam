@@ -5,7 +5,7 @@ import { handleButton } from './handlers/buttonHandler';
 import { handleModal } from './handlers/modalHandler';
 import { registerCommands } from './commands';
 import { DISCORD_BOT_TOKEN } from './config';
-import { initializeStorage } from './storage/megaStorage';
+import { initializeStorage } from '../voice/storage';
 
 // Client mit notwendigen Intents
 const client = new Client({

@@ -1,5 +1,5 @@
 import { ModalSubmitInteraction, GuildMember, VoiceChannel } from 'discord.js';
-import { addHighlight } from '../voice/recording';
+import { addHighlight } from '../../voice/recording';
 import log from "encore.dev/log";
 
 export async function handleModal(interaction: ModalSubmitInteraction) {

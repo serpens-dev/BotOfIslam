@@ -7,4 +7,4 @@ export const VoiceDB = new SQLDatabase("voice", {
 });
 
 // Voice Service
-export default new Service("voice"); 
+export default new Service("voice");

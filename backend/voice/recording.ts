@@ -9,12 +9,12 @@ import { join } from 'path';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import log from "encore.dev/log";
-import { client } from '../bot';
+import { client } from '../discord/bot';
 import { startAudioRecording, stopAudioRecording } from './audioRecorder';
 import { startScreenRecording, stopScreenRecording } from './screenRecorder';
-import { getStorage } from '../storage/megaStorage';
+import { getStorage } from './storage';
 import { createHighlightClips } from './clipGenerator';
-import { VoiceDB } from './service';
+import { VoiceDB } from './encore.service';
 
 interface RecordingSession {
   id: number; // Datenbank ID

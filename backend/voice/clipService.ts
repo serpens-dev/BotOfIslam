@@ -1,4 +1,4 @@
-import { VoiceDB } from './service';
+import { VoiceDB } from './encore.service';
 import { createClip } from './clipGenerator';
 import { getStorage } from '../storage/megaStorage';
 import log from "encore.dev/log";

@@ -1,7 +1,7 @@
 import { Interaction, GuildMember, VoiceChannel, ChatInputCommandInteraction } from 'discord.js';
 import { db } from '../db';
 import { addPoints, getPoints } from '../points/pointsSystem';
-import { startRecording, stopRecording } from '../voice/recording';
+import { startRecording, stopRecording } from '../../voice/recording';
 import log from "encore.dev/log";
 import { hasRequiredRole } from '../fitna/fitnaSystem';
 import { giveFitnaPoint } from '../fitna/fitnaSystem';

@@ -1,5 +1,5 @@
 import { ButtonInteraction, GuildMember, VoiceChannel } from 'discord.js';
-import { toggleScreenRecording, addHighlight, stopRecording } from '../voice/recording';
+import { toggleScreenRecording, addHighlight, stopRecording } from '../../voice/recording';
 import log from "encore.dev/log";
 
 export async function handleButton(interaction: ButtonInteraction) {

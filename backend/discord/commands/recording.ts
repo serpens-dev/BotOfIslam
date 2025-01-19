@@ -14,7 +14,7 @@ import {
   stopRecording, 
   toggleScreenRecording, 
   addHighlight 
-} from '../voice/recording';
+} from '../../voice/recording';
 import log from "encore.dev/log";
 
 export const recordingCommands = [
