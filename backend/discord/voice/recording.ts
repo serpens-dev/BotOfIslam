@@ -14,8 +14,10 @@ import { startAudioRecording, stopAudioRecording } from './audioRecorder';
 import { startScreenRecording, stopScreenRecording } from './screenRecorder';
 import { getStorage } from '../storage/megaStorage';
 import { createHighlightClips } from './clipGenerator';
+import { VoiceDB } from './encore.service';
 
 interface RecordingSession {
+  id: number; // Datenbank ID
   channelId: string;
   participants: Set<string>; // User IDs
   startTime: Date;
@@ -51,6 +53,40 @@ export async function startRecording(
       throw new Error('Es läuft bereits eine Aufnahme in diesem Channel');
     }
 
+    // Erstelle Aufnahme in der Datenbank
+    const row = await VoiceDB.queryRow<{ id: number }>`
+      INSERT INTO recordings (
+        channel_id,
+        started_at,
+        initiator_id,
+        screen_recording
+      ) VALUES (
+        ${voiceChannel.id},
+        NOW(),
+        ${initiator.id},
+        false
+      )
+      RETURNING id
+    `;
+
+    if (!row?.id) {
+      throw new Error('Fehler beim Erstellen der Aufnahme in der Datenbank');
+    }
+
+    // Füge Teilnehmer zur Datenbank hinzu
+    const participantIds = participants || [];
+    for (const userId of participantIds) {
+      await VoiceDB.exec`
+        INSERT INTO recording_participants (
+          recording_id,
+          user_id
+        ) VALUES (
+          ${row.id},
+          ${userId}
+        )
+      `;
+    }
+
     // Setze Channel Name
     const originalName = voiceChannel.name;
     await voiceChannel.setName(`🔴 ${originalName}`);
@@ -60,8 +96,9 @@ export async function startRecording(
 
     // Erstelle neue Recording Session
     const session: RecordingSession = {
+      id: row.id,
       channelId: voiceChannel.id,
-      participants: new Set(participants || []),
+      participants: new Set(participantIds),
       startTime: new Date(),
       filePath: `recordings/${voiceChannel.id}_${Date.now()}.webm`,
       screenRecording: false,
@@ -82,7 +119,8 @@ export async function startRecording(
 
     log.info('Aufnahme gestartet', {
       channel: voiceChannel.name,
-      initiator: initiator.user.tag
+      initiator: initiator.user.tag,
+      recordingId: session.id
     });
 
     return session;
@@ -123,6 +161,16 @@ export async function stopRecording(channelId: string) {
       const fileName = audioFile.split('/').pop()!;
       const link = await storage.uploadFile(audioFile, `audio/${fileName}`);
       session.cloudLinks.audio.push(link);
+
+      // Update Teilnehmer in der Datenbank
+      await VoiceDB.exec`
+        UPDATE recording_participants
+        SET 
+          audio_file_path = ${audioFile},
+          cloud_audio_link = ${link}
+        WHERE recording_id = ${session.id}
+          AND user_id = ${fileName.split('_')[0]} -- User ID ist Teil des Dateinamens
+      `;
     }
 
     // Upload Screen Files
@@ -130,6 +178,16 @@ export async function stopRecording(channelId: string) {
       const fileName = screenFile.split('/').pop()!;
       const link = await storage.uploadFile(screenFile, `screen/${fileName}`);
       session.cloudLinks.screen.push(link);
+
+      // Update Teilnehmer in der Datenbank
+      await VoiceDB.exec`
+        UPDATE recording_participants
+        SET 
+          screen_file_path = ${screenFile},
+          cloud_screen_link = ${link}
+        WHERE recording_id = ${session.id}
+          AND user_id = ${fileName.split('_')[0]} -- User ID ist Teil des Dateinamens
+      `;
     }
 
     // Erstelle Highlight Clips falls vorhanden
@@ -140,7 +198,32 @@ export async function stopRecording(channelId: string) {
         session.highlights,
         session.startTime
       );
+
+      // Update Highlights in der Datenbank
+      for (let i = 0; i < session.highlights.length; i++) {
+        const highlight = session.highlights[i];
+        const clip = highlightClips[i];
+
+        if (clip) {
+          await VoiceDB.exec`
+            UPDATE highlights
+            SET cloud_clip_link = ${clip.link}
+            WHERE recording_id = ${session.id}
+              AND created_by = ${highlight.createdBy}
+              AND description = ${highlight.description}
+          `;
+        }
+      }
     }
+
+    // Update Aufnahme Status in der Datenbank
+    await VoiceDB.exec`
+      UPDATE recordings
+      SET 
+        ended_at = NOW(),
+        screen_recording = ${session.screenRecording}
+      WHERE id = ${session.id}
+    `;
 
     // Entferne Aufnahme-Emoji vom Channel Namen
     await channel.setName(channel.name.replace('🔴 ', ''));
@@ -180,7 +263,8 @@ export async function stopRecording(channelId: string) {
       audioFiles: session.audioFiles,
       screenFiles: session.screenFiles,
       cloudLinks: session.cloudLinks,
-      highlightClips
+      highlightClips,
+      recordingId: session.id
     });
 
     return session;
@@ -213,6 +297,14 @@ export async function toggleScreenRecording(channelId: string) {
       }
       session.screenRecording = false;
     }
+
+    // Update Screen Recording Status in der Datenbank
+    await VoiceDB.exec`
+      UPDATE recordings
+      SET screen_recording = ${session.screenRecording}
+      WHERE id = ${session.id}
+    `;
+
     return session.screenRecording;
   } catch (error) {
     log.error('Fehler beim Ändern des Screen Recordings:', error);
@@ -236,7 +328,24 @@ export async function addHighlight(
     createdBy: userId
   };
 
+  // Füge Highlight zur Session hinzu
   session.highlights.push(highlight);
+
+  // Speichere Highlight in der Datenbank
+  await VoiceDB.exec`
+    INSERT INTO highlights (
+      recording_id,
+      timestamp,
+      description,
+      created_by
+    ) VALUES (
+      ${session.id},
+      ${highlight.timestamp},
+      ${description},
+      ${userId}
+    )
+  `;
+
   return highlight;
 }
 
