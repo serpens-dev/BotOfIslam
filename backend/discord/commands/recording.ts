@@ -7,7 +7,8 @@ import {
   ButtonStyle,
   ActionRowBuilder,
   VoiceChannel,
-  ChatInputCommandInteraction
+  ChatInputCommandInteraction,
+  ApplicationCommandDataResolvable
 } from 'discord.js';
 import log from "encore.dev/log";
 import { voice } from "~encore/clients";
@@ -28,18 +29,15 @@ interface Recording {
 export const recordingCommands = [
   new SlashCommandBuilder()
     .setName('record')
-    .setDescription('Startet eine neue Aufnahme')
-    .toJSON(),
+    .setDescription('Startet eine neue Aufnahme'),
 
   new SlashCommandBuilder()
     .setName('stoprecord')
-    .setDescription('Stoppt die aktuelle Aufnahme')
-    .toJSON(),
+    .setDescription('Stoppt die aktuelle Aufnahme'),
 
   new SlashCommandBuilder()
     .setName('screen')
-    .setDescription('Aktiviert/Deaktiviert Screen Recording')
-    .toJSON(),
+    .setDescription('Aktiviert/Deaktiviert Screen Recording'),
 
   new SlashCommandBuilder()
     .setName('highlight')
@@ -50,7 +48,6 @@ export const recordingCommands = [
         .setDescription('Beschreibung des Highlights')
         .setRequired(true)
     )
-    .toJSON()
 ];
 
 export async function handleRecordCommand(interaction: ChatInputCommandInteraction) {

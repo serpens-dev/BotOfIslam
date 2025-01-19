@@ -5,6 +5,13 @@ import {
   ChannelType,
   VoiceState
 } from 'discord.js';
+import {
+  joinVoiceChannel,
+  VoiceConnection,
+  getVoiceConnection,
+  createAudioPlayer,
+  createAudioResource
+} from '@discordjs/voice';
 import { join } from 'path';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
@@ -16,6 +23,7 @@ import { getStorage } from './storage';
 import { createHighlightClips } from './clipGenerator';
 import { VoiceDB } from './encore.service';
 import { Recording, Highlight } from "./types";
+import { getVoiceChannel as fetchVoiceChannel } from "./utils";
 
 interface RecordingSession {
   id: number;                    // Datenbank ID als number
@@ -39,6 +47,25 @@ const activeRecordings = new Map<string, Recording>();
 
 export async function startRecording(channelId: string, initiatorId: string): Promise<Recording> {
   try {
+    // Get voice channel
+    const channel = await fetchVoiceChannel(channelId);
+    if (!channel) {
+      throw new Error("Voice Channel nicht gefunden");
+    }
+
+    // Join voice channel
+    const connection = joinVoiceChannel({
+      channelId: channel.id,
+      guildId: channel.guild.id,
+      adapterCreator: channel.guild.voiceAdapterCreator,
+      selfDeaf: false,
+      selfMute: false
+    });
+
+    if (!connection) {
+      throw new Error("Konnte dem Voice Channel nicht beitreten");
+    }
+
     // Create new recording in database
     const result = await VoiceDB.queryRow<{ id: number }>`
       INSERT INTO recordings (channel_id, initiator_id, started_at)
@@ -52,7 +79,7 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
 
     // Initialize recording session
     const recording: Recording = {
-      id: result.id,  // Direkt die number verwenden
+      id: result.id,
       channelId,
       initiatorId,
       startedAt: new Date(),
@@ -72,8 +99,20 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
     // Save to active recordings
     activeRecordings.set(channelId, recording);
 
+    // Start audio recording
+    await startAudioRecording(connection, recording.id.toString());
+
+    // Update channel name to show recording status
+    await channel.setName(`🎙️ ${channel.name}`);
+
     return recording;
   } catch (error) {
+    // If something goes wrong, clean up
+    const connection = getVoiceConnection(channelId);
+    if (connection) {
+      connection.destroy();
+    }
+    activeRecordings.delete(channelId);
     log.error("Fehler beim Starten der Aufnahme:", error);
     throw error;
   }

@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits } from 'discord.js';
+import { Client, Events, GatewayIntentBits, ApplicationCommandDataResolvable } from 'discord.js';
 import log from "encore.dev/log";
 import { handleCommand } from './handlers/commandHandler';
 import { handleButton } from './handlers/buttonHandler';
@@ -24,10 +24,10 @@ client.once(Events.ClientReady, async () => {
   try {
     // Registriere Commands
     if (!client.application) {
-      throw new Error('Client application ist nicht verfügbar!');
+      throw new Error('Client application not ready');
     }
 
-    const commandData = recordingCommands;
+    const commandData = recordingCommands.map(command => command.toJSON());
     await client.application.commands.set(commandData);
     log.info('Commands erfolgreich registriert!');
   } catch (error) {

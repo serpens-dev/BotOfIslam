@@ -1,11 +1,9 @@
-import { Interaction, GuildMember, VoiceChannel, ChatInputCommandInteraction } from 'discord.js';
+import { Interaction, GuildMember, VoiceChannel, ChatInputCommandInteraction, EmbedBuilder, APIEmbed, EmbedType } from 'discord.js';
 import { db } from '../db';
-import { addPoints, getPoints } from '../points/pointsSystem';
+import { addPoints, getPoints, hasRequiredRole } from '../utils';
 import { startRecording, stopRecording } from '../../voice/recording';
 import log from "encore.dev/log";
-import { hasRequiredRole } from '../fitna/fitnaSystem';
-import { giveFitnaPoint } from '../fitna/fitnaSystem';
-import { getRandomMessage } from '../fitna/fitnaSystem';
+import { giveFitnaPoint, getRandomMessage } from '../fitna/fitnaSystem';
 import { getDetailedLeaderboard } from '../fitna/leaderboardSystem';
 import { MuteType, getMuteTypeDisplay } from '../fitna/muteTypes';
 import { 
@@ -15,14 +13,27 @@ import {
   handleHighlightCommand 
 } from '../commands/recording';
 
-export async function handleCommand(interaction: Interaction) {
+export async function handleCommand(interaction: ChatInputCommandInteraction) {
   if (!interaction.isChatInputCommand()) return;
 
   try {
-    switch (interaction.commandName) {
+    const command = interaction.commandName;
+    const member = interaction.member;
+
+    if (!member) {
+      await interaction.reply({ content: 'Fehler: Kein Mitglied gefunden.', ephemeral: true });
+      return;
+    }
+
+    switch (command) {
       case 'points':
-        const points = await getPoints(interaction.user.id);
-        await interaction.reply(`Du hast ${points} Punkte!`);
+        const points = await getPoints(member.user.id);
+        const embed = new EmbedBuilder()
+          .setTitle('Fitna Punkte')
+          .setDescription(`Du hast aktuell ${points} Fitna Punkte.`)
+          .setColor(0xff0000);
+        
+        await interaction.reply({ content: `Du hast aktuell ${points} Fitna Punkte.`, ephemeral: true });
         break;
 
       case 'addpoints':
@@ -90,8 +101,15 @@ export async function handleCommand(interaction: Interaction) {
         }
 
         try {
-          const embed = await getDetailedLeaderboard(timeframe, Array.from(guild.members.cache.values()).map(m => m.user));
-          await interaction.reply({ embeds: [embed] });
+          const embedData = await getDetailedLeaderboard(timeframe, Array.from(guild.members.cache.values()).map(m => m.user));
+          const embed: APIEmbed = {
+            ...embedData,
+            type: EmbedType.Rich
+          };
+          await interaction.reply({
+            embeds: [embed],
+            ephemeral: true
+          });
         } catch (error) {
           log.error('Fehler beim Erstellen des Leaderboards:', error);
           await interaction.reply({
@@ -126,19 +144,19 @@ export async function handleCommand(interaction: Interaction) {
         break;
 
       default:
-        log.warn('Unbekannter Command:', interaction.commandName);
+        log.warn('Unbekannter Command:', command);
         break;
     }
   } catch (error) {
-    log.error('Fehler beim Ausführen des Commands:', error);
+    log.error("Error handling command:", { error });
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp({
-        content: 'Es ist ein Fehler aufgetreten beim Ausführen des Commands.',
+        content: 'Ein Fehler ist aufgetreten beim Ausführen des Commands.',
         ephemeral: true
       });
     } else {
       await interaction.reply({
-        content: 'Es ist ein Fehler aufgetreten beim Ausführen des Commands.',
+        content: 'Ein Fehler ist aufgetreten beim Ausführen des Commands.',
         ephemeral: true
       });
     }
