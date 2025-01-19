@@ -1,8 +1,11 @@
 import { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { DISCORD_BOT_TOKEN, DISCORD_CLIENT_ID } from '../config';
 import log from "encore.dev/log";
+import { recordingCommands } from './recording';
 
 const commands = [
+  ...recordingCommands,
+  
   new SlashCommandBuilder()
     .setName('points')
     .setDescription('Zeigt deine Punkte an'),
@@ -18,14 +21,6 @@ const commands = [
       option.setName('amount')
         .setDescription('Anzahl der Punkte')
         .setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('record')
-    .setDescription('Startet eine Aufnahme im aktuellen Voice-Channel'),
-
-  new SlashCommandBuilder()
-    .setName('stoprecord')
-    .setDescription('Stoppt die aktuelle Aufnahme'),
 
   new SlashCommandBuilder()
     .setName('fitna')

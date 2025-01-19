@@ -1,6 +1,8 @@
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import log from "encore.dev/log";
 import { handleCommand } from './handlers/commandHandler';
+import { handleButton } from './handlers/buttonHandler';
+import { handleModal } from './handlers/modalHandler';
 import { registerCommands } from './commands';
 import { DISCORD_BOT_TOKEN } from './config';
 
@@ -20,7 +22,19 @@ client.once(Events.ClientReady, (readyClient) => {
 });
 
 // Command Handler
-client.on(Events.InteractionCreate, handleCommand);
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    if (interaction.isCommand()) {
+      await handleCommand(interaction);
+    } else if (interaction.isButton()) {
+      await handleButton(interaction);
+    } else if (interaction.isModalSubmit()) {
+      await handleModal(interaction);
+    }
+  } catch (error) {
+    log.error('Fehler beim Verarbeiten der Interaktion:', error);
+  }
+});
 
 // Bot starten
 export async function startBot() {

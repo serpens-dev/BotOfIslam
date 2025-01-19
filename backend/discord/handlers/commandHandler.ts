@@ -8,6 +8,12 @@ import { giveFitnaPoint } from '../fitna/fitnaSystem';
 import { getRandomMessage } from '../fitna/fitnaSystem';
 import { getDetailedLeaderboard } from '../fitna/leaderboardSystem';
 import { MuteType, getMuteTypeDisplay } from '../fitna/muteTypes';
+import { 
+  handleRecordCommand, 
+  handleStopRecordCommand, 
+  handleScreenCommand, 
+  handleHighlightCommand 
+} from '../commands/recording';
 
 export async function handleCommand(interaction: Interaction) {
   if (!interaction.isChatInputCommand()) return;
@@ -29,18 +35,19 @@ export async function handleCommand(interaction: Interaction) {
         break;
 
       case 'record':
-        const voiceMember = interaction.member as GuildMember;
-        if (!voiceMember?.voice?.channel) {
-          await interaction.reply('Du musst in einem Voice-Channel sein!');
-          return;
-        }
-        await startRecording(voiceMember.voice.channel as VoiceChannel);
-        await interaction.reply('Aufnahme gestartet!');
+        await handleRecordCommand(interaction);
         break;
 
       case 'stoprecord':
-        await stopRecording(interaction.guildId!);
-        await interaction.reply('Aufnahme gestoppt!');
+        await handleStopRecordCommand(interaction);
+        break;
+
+      case 'screen':
+        await handleScreenCommand(interaction);
+        break;
+
+      case 'highlight':
+        await handleHighlightCommand(interaction);
         break;
 
       case 'fitna':
@@ -117,12 +124,23 @@ export async function handleCommand(interaction: Interaction) {
           });
         }
         break;
+
+      default:
+        log.warn('Unbekannter Command:', interaction.commandName);
+        break;
     }
   } catch (error) {
     log.error('Fehler beim Ausführen des Commands:', error);
-    await interaction.reply({ 
-      content: 'Es ist ein Fehler aufgetreten!', 
-      ephemeral: true 
-    });
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({
+        content: 'Es ist ein Fehler aufgetreten beim Ausführen des Commands.',
+        ephemeral: true
+      });
+    } else {
+      await interaction.reply({
+        content: 'Es ist ein Fehler aufgetreten beim Ausführen des Commands.',
+        ephemeral: true
+      });
+    }
   }
 } 
