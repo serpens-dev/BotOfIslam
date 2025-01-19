@@ -17,16 +17,17 @@ import { createHighlightClips } from './clipGenerator';
 import { VoiceDB } from './encore.service';
 
 interface RecordingSession {
-  id: number; // Datenbank ID
+  id: number;                    // Datenbank ID
   channelId: string;
-  participants: Set<string>; // User IDs
   startTime: Date;
-  filePath: string;
-  screenRecording: boolean;
-  highlights: Highlight[];
-  lastConfirmation: Date;
+  initiatorId: string;
+  participants: Set<string>;
   audioFiles: string[];
   screenFiles: string[];
+  highlights: Highlight[];
+  screenRecordingEnabled: boolean;
+  screenRecording: boolean;      // Aktiver Status
+  lastConfirmation: Date;
   cloudLinks: {
     audio: string[];
     screen: string[];
@@ -42,15 +43,11 @@ interface Highlight {
 
 const activeRecordings = new Map<string, RecordingSession>();
 
-export async function startRecording(
-  channelId: string,
-  initiatorId: string,
-  participants?: string[]
-) {
-  const channel = await getVoiceChannel(channelId);
-  const initiator = await channel.guild.members.fetch(initiatorId);
-  
+export async function startRecording(channelId: string, initiatorId: string): Promise<RecordingSession> {
   try {
+    const channel = await getVoiceChannel(channelId);
+    const initiator = await channel.guild.members.fetch(initiatorId);
+
     // Prüfe ob bereits eine Aufnahme läuft
     if (activeRecordings.has(channelId)) {
       throw new Error('Es läuft bereits eine Aufnahme in diesem Channel');
@@ -76,55 +73,41 @@ export async function startRecording(
       throw new Error('Fehler beim Erstellen der Aufnahme in der Datenbank');
     }
 
-    // Füge Teilnehmer zur Datenbank hinzu
-    const participantIds = participants || [];
-    for (const userId of participantIds) {
-      await VoiceDB.exec`
-        INSERT INTO recording_participants (
-          recording_id,
-          user_id
-        ) VALUES (
-          ${row.id},
-          ${userId}
-        )
-      `;
+    // Starte Audio Aufnahme
+    const connection = await startAudioRecording(channel);
+    
+    // Warte kurz um sicherzustellen dass die Aufnahme initialisiert ist
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Prüfe ob die Aufnahme wirklich gestartet wurde
+    if (!activeRecordings.has(channelId)) {
+      throw new Error('Aufnahme konnte nicht gestartet werden');
     }
 
-    // Setze Channel Name
-    const originalName = channel.name;
-    await channel.setName(`🔴 ${originalName}`);
-
-    // Starte Audio Aufnahme
-    await startAudioRecording(channel, participants);
-
-    // Erstelle neue Recording Session
+    // Erstelle neue Aufnahme Session
     const session: RecordingSession = {
       id: row.id,
-      channelId: channelId,
-      participants: new Set(participantIds),
+      channelId: channel.id,
       startTime: new Date(),
-      filePath: `recordings/${channelId}_${Date.now()}.webm`,
-      screenRecording: false,
-      highlights: [],
-      lastConfirmation: new Date(),
+      initiatorId: initiator.id,
+      participants: new Set(channel.members.map(m => m.id)),
       audioFiles: [],
       screenFiles: [],
+      highlights: [],
+      screenRecordingEnabled: false,
+      screenRecording: false,
+      lastConfirmation: new Date(),
       cloudLinks: {
         audio: [],
         screen: []
       }
     };
 
+    // Speichere Session
     activeRecordings.set(channelId, session);
 
-    // Starte Confirmation Timer
-    startConfirmationTimer(channel);
-
-    log.info('Aufnahme gestartet', {
-      channel: channel.name,
-      initiator: initiator.user.tag,
-      recordingId: session.id
-    });
+    // Aktualisiere Channel Namen
+    await channel.setName(`🔴 ${channel.name}`);
 
     return session;
   } catch (error) {

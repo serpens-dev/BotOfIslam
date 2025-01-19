@@ -68,7 +68,7 @@ interface GetRecordingParams {
 export const startRecording = api<StartRecordingParams>(
   { method: "POST", path: "/recordings/start" },
   async ({ channelId, initiatorId, participants }): Promise<{ recording: Recording }> => {
-    const session = await startRecordingImpl(channelId, initiatorId, participants);
+    const session = await startRecordingImpl(channelId, initiatorId);
     return { 
       recording: {
         id: session.id,
