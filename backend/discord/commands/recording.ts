@@ -20,12 +20,7 @@ import log from "encore.dev/log";
 export const recordingCommands = [
   new SlashCommandBuilder()
     .setName('record')
-    .setDescription('Startet eine Aufnahme im aktuellen Voice-Channel')
-    .addUserOption(option =>
-      option.setName('user')
-        .setDescription('Benutzer der aufgenommen werden soll (optional)')
-        .setRequired(false)
-    ),
+    .setDescription('Startet eine Aufnahme im aktuellen Voice-Channel'),
 
   new SlashCommandBuilder()
     .setName('stoprecord')
@@ -46,51 +41,46 @@ export const recordingCommands = [
 ];
 
 export async function handleRecordCommand(interaction: ChatInputCommandInteraction) {
-  const member = interaction.member as GuildMember;
-  if (!member.voice.channel || !(member.voice.channel instanceof VoiceChannel)) {
-    await interaction.reply({
-      content: 'Du musst in einem Voice-Channel sein um eine Aufnahme zu starten!',
-      ephemeral: true
-    });
-    return;
-  }
-
   try {
-    const selectedUser = interaction.options.getUser('user');
-    const participants = selectedUser ? [selectedUser.id] : undefined;
+    const member = interaction.member as GuildMember;
+    const channel = member.voice.channel as VoiceChannel;
 
-    const { recording } = await startRecording(
-      member.voice.channel.id,
-      member.id,
-      participants
-    );
-    
-    const row = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId('screen_record')
-          .setLabel('Screen Recording')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('add_highlight')
-          .setLabel('Highlight setzen')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('stop_recording')
-          .setLabel('Aufnahme stoppen')
-          .setStyle(ButtonStyle.Danger)
-      );
+    if (!channel) {
+      await interaction.reply({ 
+        content: 'Du musst in einem Voice Channel sein um eine Aufnahme zu starten!',
+        ephemeral: true 
+      });
+      return;
+    }
 
-    await interaction.reply({
-      content: 'Aufnahme gestartet! Nutze die Buttons um die Aufnahme zu steuern.',
-      components: [row]
+    // Sofort antworten
+    await interaction.reply({ 
+      content: 'Starte Aufnahme...',
+      ephemeral: true 
     });
+
+    // Aufnahme im Hintergrund starten
+    const recording = await startRecording(
+      channel.id,
+      member.id,
+      channel.members.map(m => m.id)
+    );
+
+    // Erfolg in den Channel senden
+    await channel.send('🎙️ Aufnahme gestartet!');
+
   } catch (error: any) {
     log.error('Fehler beim Starten der Aufnahme:', error);
-    await interaction.reply({
-      content: `Fehler beim Starten der Aufnahme: ${error.message || 'Unbekannter Fehler'}`,
-      ephemeral: true
-    });
+    
+    // Fehler als Follow-up senden
+    try {
+      await interaction.followUp({ 
+        content: `Fehler beim Starten der Aufnahme: ${error.message}`,
+        ephemeral: true 
+      });
+    } catch (e) {
+      log.error('Fehler beim Senden der Fehlermeldung:', e);
+    }
   }
 }
 
