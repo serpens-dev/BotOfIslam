@@ -13,7 +13,7 @@ export async function stopRecording(channelId: string): Promise<{ recording: Rec
 
 // Toggle Screen Recording
 export async function toggleScreenRecording(channelId: string): Promise<{ enabled: boolean }> {
-  return voice.toggleScreen({ channelId });
+  return voice.toggleScreenRecording({ channelId });
 }
 
 // Füge einen Highlight hinzu
