@@ -48,7 +48,7 @@ export async function startAudioRecording(connection: VoiceConnection, recording
     
     // Create recordings directory
     await mkdir(recordingsPath, { recursive: true });
-    log.info("Aufnahmeverzeichnis erstellt", { path: recordingsPath });
+    log.info("🎙️ Aufnahmeverzeichnis erstellt", { path: recordingsPath });
 
     // Initialisiere die Aufnahme-Session
     activeRecordings.set(channelId, {
@@ -56,7 +56,7 @@ export async function startAudioRecording(connection: VoiceConnection, recording
       userStreams: new Map()
     });
 
-    log.info("Audio-Aufnahme initialisiert", { channelId });
+    log.info("🎤 Audio-System bereit und wartet auf Sprecher", { channelId });
 
     // Start recording for each speaking user
     connection.receiver.speaking.on('start', async (userId) => {
@@ -66,10 +66,11 @@ export async function startAudioRecording(connection: VoiceConnection, recording
 
         // Wenn der Benutzer bereits aufgenommen wird, ignorieren
         if (recording.userStreams.has(userId)) {
+          log.debug("👥 Benutzer wird bereits aufgenommen", { userId });
           return;
         }
 
-        log.info("Benutzer beginnt zu sprechen", { userId });
+        log.info("🗣️ Benutzer beginnt zu sprechen - Starte Aufnahme", { userId });
         
         const audioStream = receiver.subscribe(userId, {
           end: {
@@ -112,15 +113,15 @@ export async function startAudioRecording(connection: VoiceConnection, recording
         ffmpeg.stderr.on('data', (data) => {
           const output = data.toString();
           if (output.includes('Error') || output.includes('error')) {
-            log.error("FFmpeg Fehler Output:", { output });
+            log.error("🔴 FFmpeg Fehler:", { output });
           } else {
-            log.debug("FFmpeg Debug Output:", { output });
+            log.debug("🎵 FFmpeg Status:", { output });
           }
         });
 
         // Verbesserte Fehlerbehandlung
         ffmpeg.on('error', (error) => {
-          log.error("FFmpeg Prozess-Fehler:", { 
+          log.error("❌ FFmpeg Prozess-Fehler:", { 
             error: error.message, 
             command: FFMPEG_PATH, 
             args: ffmpeg.spawnargs 
@@ -131,7 +132,7 @@ export async function startAudioRecording(connection: VoiceConnection, recording
             buffer.destroy();
             ffmpeg.kill();
           } catch (e) {
-            log.error("Fehler beim Aufräumen nach FFmpeg-Fehler:", e);
+            log.error("💥 Fehler beim Aufräumen nach FFmpeg-Fehler:", e);
           }
         });
 
@@ -145,14 +146,14 @@ export async function startAudioRecording(connection: VoiceConnection, recording
 
         // Fehlerbehandlung für Streams
         buffer.on('error', (error: NodeJS.ErrnoException) => {
-          log.error("Stream Fehler:", { error: error.message });
+          log.error("🔴 Stream Fehler:", { error: error.message });
           try {
             audioStream.destroy();
             transcoder.destroy();
             buffer.destroy();
             ffmpeg.kill();
           } catch (e) {
-            log.error("Fehler beim Aufräumen nach Stream-Fehler:", e);
+            log.error("💥 Fehler beim Aufräumen nach Stream-Fehler:", e);
           }
         });
 
@@ -167,27 +168,27 @@ export async function startAudioRecording(connection: VoiceConnection, recording
         // Erfolgs-Logging
         ffmpeg.on('exit', (code, signal) => {
           if (code === 0) {
-            log.info("FFmpeg Konvertierung erfolgreich beendet", { filePath });
+            log.info("✅ FFmpeg Konvertierung erfolgreich", { filePath });
           } else {
-            log.error("FFmpeg Prozess beendet mit Fehler", { code, signal, filePath });
+            log.error("❌ FFmpeg Prozess fehlgeschlagen", { code, signal, filePath });
           }
         });
 
-        log.info("Neue Audioaufnahme gestartet", { userId, filePath });
+        log.info("🎙️ Neue Audioaufnahme aktiv", { userId, filePath });
       } catch (error) {
-        log.error("Fehler beim Starten der Benutzer-Aufnahme", { userId, error });
+        log.error("❌ Fehler beim Starten der Benutzer-Aufnahme", { userId, error });
       }
     });
 
     // Wir ignorieren das 'end' Event, da wir kontinuierlich aufnehmen wollen
     connection.receiver.speaking.on('end', (userId) => {
-      // Nur Logging
-      log.debug("Benutzer hat aufgehört zu sprechen", { userId });
+      log.debug("👤 Benutzer pausiert (Aufnahme läuft weiter)", { userId });
     });
 
+    log.info("✨ Aufnahmesystem vollständig initialisiert und aktiv");
     return true;
   } catch (error) {
-    log.error("Fehler beim Starten der Audio-Aufnahme:", error);
+    log.error("❌ Fehler beim Starten der Audio-Aufnahme:", error);
     throw error;
   }
 }
@@ -196,9 +197,11 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
   try {
     const recording = activeRecordings.get(channelId);
     if (!recording) {
-      log.warn("Keine aktive Audio-Aufnahme gefunden", { channelId });
+      log.warn("⚠️ Keine aktive Audio-Aufnahme gefunden", { channelId });
       return null;
     }
+
+    log.info("🛑 Beginne Beenden der Aufnahme...", { channelId });
 
     // Sammle alle Dateipfade
     const audioFiles: string[] = [];
@@ -206,7 +209,7 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
     // Beende alle Streams sicher
     for (const [userId, userStream] of recording.userStreams) {
       try {
-        log.info("Beende Audio-Stream", { userId });
+        log.info("🔄 Beende Audio-Stream", { userId });
         
         // Beende Streams sauber
         userStream.stream.destroy();
@@ -217,6 +220,7 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
         await new Promise((resolve) => {
           userStream.ffmpeg.on('exit', () => {
             audioFiles.push(userStream.filePath);
+            log.info("✅ FFmpeg Prozess beendet", { userId, filePath: userStream.filePath });
             resolve(null);
           });
         });
@@ -225,7 +229,7 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
         await new Promise(resolve => setTimeout(resolve, 2000));
         
       } catch (error) {
-        log.error("Fehler beim Beenden des Streams", { userId, error });
+        log.error("❌ Fehler beim Beenden des Streams", { userId, error });
       }
     }
 
@@ -234,16 +238,20 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
     
     // Trenne die Verbindung
     recording.connection.destroy();
-    log.info("Voice-Verbindung getrennt");
+    log.info("🔌 Voice-Verbindung getrennt");
     
     // Entferne die Aufnahme aus der Map
     activeRecordings.delete(channelId);
     
-    log.info("Audio-Aufnahme gestoppt", { channelId, fileCount: audioFiles.length });
+    log.info("✅ Audio-Aufnahme erfolgreich beendet", { 
+      channelId, 
+      fileCount: audioFiles.length,
+      files: audioFiles 
+    });
 
     return { audioFiles };
   } catch (error) {
-    log.error("Fehler beim Stoppen der Audio-Aufnahme:", error);
+    log.error("❌ Fehler beim Stoppen der Audio-Aufnahme:", error);
     throw error;
   }
 } 
