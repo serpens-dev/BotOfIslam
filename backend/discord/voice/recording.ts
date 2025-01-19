@@ -12,6 +12,7 @@ import log from "encore.dev/log";
 import { client } from '../bot';
 import { startAudioRecording, stopAudioRecording } from './audioRecorder';
 import { startScreenRecording, stopScreenRecording } from './screenRecorder';
+import { getStorage } from '../storage/megaStorage';
 
 interface RecordingSession {
   channelId: string;
@@ -23,6 +24,10 @@ interface RecordingSession {
   lastConfirmation: Date;
   audioFiles: string[];
   screenFiles: string[];
+  cloudLinks: {
+    audio: string[];
+    screen: string[];
+  };
 }
 
 interface Highlight {
@@ -62,7 +67,11 @@ export async function startRecording(
       highlights: [],
       lastConfirmation: new Date(),
       audioFiles: [],
-      screenFiles: []
+      screenFiles: [],
+      cloudLinks: {
+        audio: [],
+        screen: []
+      }
     };
 
     activeRecordings.set(voiceChannel.id, session);
@@ -105,9 +114,45 @@ export async function stopRecording(channelId: string) {
       }
     }
 
+    // Upload Dateien zu Mega
+    const storage = getStorage();
+    
+    // Upload Audio Files
+    for (const audioFile of session.audioFiles) {
+      const fileName = audioFile.split('/').pop()!;
+      const link = await storage.uploadFile(audioFile, `audio/${fileName}`);
+      session.cloudLinks.audio.push(link);
+    }
+
+    // Upload Screen Files
+    for (const screenFile of session.screenFiles) {
+      const fileName = screenFile.split('/').pop()!;
+      const link = await storage.uploadFile(screenFile, `screen/${fileName}`);
+      session.cloudLinks.screen.push(link);
+    }
+
     // Entferne Aufnahme-Emoji vom Channel Namen
     await channel.setName(channel.name.replace('🔴 ', ''));
     
+    // Sende Links in den Channel
+    let message = '**Aufnahme beendet!**\n\n';
+    
+    if (session.cloudLinks.audio.length > 0) {
+      message += '**Audio Aufnahmen:**\n';
+      session.cloudLinks.audio.forEach((link, i) => {
+        message += `${i + 1}. ${link}\n`;
+      });
+    }
+
+    if (session.cloudLinks.screen.length > 0) {
+      message += '\n**Screen Recordings:**\n';
+      session.cloudLinks.screen.forEach((link, i) => {
+        message += `${i + 1}. ${link}\n`;
+      });
+    }
+
+    await channel.send(message);
+
     // Cleanup
     activeRecordings.delete(channelId);
 
@@ -115,7 +160,8 @@ export async function stopRecording(channelId: string) {
       channel: channel.name,
       duration: new Date().getTime() - session.startTime.getTime(),
       audioFiles: session.audioFiles,
-      screenFiles: session.screenFiles
+      screenFiles: session.screenFiles,
+      cloudLinks: session.cloudLinks
     });
 
     return session;

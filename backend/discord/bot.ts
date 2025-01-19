@@ -5,6 +5,7 @@ import { handleButton } from './handlers/buttonHandler';
 import { handleModal } from './handlers/modalHandler';
 import { registerCommands } from './commands';
 import { DISCORD_BOT_TOKEN } from './config';
+import { initializeStorage } from './storage/megaStorage';
 
 // Client mit notwendigen Intents
 const client = new Client({
@@ -40,6 +41,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 export async function startBot() {
   try {
     log.info("Starte Bot...");
+
+    // Initialisiere Storage
+    await initializeStorage({
+      email: process.env.MEGA_EMAIL!,
+      password: process.env.MEGA_PASSWORD!,
+      uploadFolder: process.env.MEGA_UPLOAD_FOLDER || '/recordings'
+    });
+
+    // Registriere Commands und starte Bot
     await registerCommands();
     await client.login(DISCORD_BOT_TOKEN);
     log.info("Bot wurde erfolgreich gestartet");
