@@ -17,23 +17,36 @@ import log from "encore.dev/log";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { getStorage } from './storage';
+import { pipeline } from 'stream/promises';
 
 // ES Module __dirname Workaround
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const activeRecordings = new Map<string, {
+  connection: VoiceConnection;
+  stream: any;
+}>();
+
 export async function startAudioRecording(connection: VoiceConnection, recordingId: string) {
   try {
+    const receiver = connection.receiver;
+    const recordingsPath = join(process.cwd(), 'recordings', recordingId);
+    
+    // Speichere die aktive Aufnahme
+    activeRecordings.set(connection.joinConfig.channelId, {
+      connection,
+      stream: receiver
+    });
+
+    log.info("Audio-Aufnahme gestartet", { channelId: connection.joinConfig.channelId });
+
     // Create recordings directory
-    const recordingDir = join(process.cwd(), 'recordings', recordingId);
-    await mkdir(recordingDir, { recursive: true });
+    await mkdir(recordingsPath, { recursive: true });
 
     // Create audio player
     const player = createAudioPlayer();
     connection.subscribe(player);
-
-    // Get voice receiver
-    const receiver = connection.receiver;
 
     // Start recording for each speaking user
     connection.receiver.speaking.on('start', async (userId) => {
@@ -45,7 +58,7 @@ export async function startAudioRecording(connection: VoiceConnection, recording
       });
 
       const fileName = `${recordingId}_${userId}_${Date.now()}.webm`;
-      const filePath = join(recordingDir, fileName);
+      const filePath = join(recordingsPath, fileName);
       const fileStream = createWriteStream(filePath);
 
       try {
@@ -97,20 +110,30 @@ export async function startAudioRecording(connection: VoiceConnection, recording
 
     return true;
   } catch (error) {
-    log.error("Error starting audio recording:", error);
+    log.error("Fehler beim Starten der Audio-Aufnahme:", error);
     throw error;
   }
 }
 
 export async function stopAudioRecording(channelId: string) {
   try {
-    const connection = getVoiceConnection(channelId);
-    if (connection) {
-      connection.destroy();
+    const recording = activeRecordings.get(channelId);
+    if (!recording) {
+      log.warn("Keine aktive Audio-Aufnahme gefunden", { channelId });
+      return;
     }
-    return true;
+
+    // Stoppe die Aufnahme
+    if (recording.stream) {
+      recording.stream.destroy();
+    }
+    
+    // Entferne die Aufnahme aus der Map
+    activeRecordings.delete(channelId);
+    
+    log.info("Audio-Aufnahme gestoppt", { channelId });
   } catch (error) {
-    log.error("Error stopping audio recording:", error);
+    log.error("Fehler beim Stoppen der Audio-Aufnahme:", error);
     throw error;
   }
 } 

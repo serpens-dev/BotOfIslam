@@ -175,6 +175,12 @@ export async function stopRecording(channelId: string): Promise<Recording> {
   }
 
   try {
+    log.info("Stoppe Aufnahme...");
+
+    // Stoppe die Audio-Aufnahme
+    await stopAudioRecording(channelId);
+    log.info("Audio-Aufnahme gestoppt");
+
     // Delete start message if it exists
     const startMsg = startMessages.get(channelId);
     if (startMsg) {
@@ -188,61 +194,101 @@ export async function stopRecording(channelId: string): Promise<Recording> {
       throw new Error("Voice Channel nicht gefunden");
     }
 
+    // Disconnect from voice channel
+    const connection = getVoiceConnection(channelId);
+    if (connection) {
+      connection.destroy();
+      log.info("Voice-Verbindung getrennt");
+    }
+
     // Update recording in database
     await VoiceDB.exec`
       UPDATE recordings 
       SET ended_at = NOW()
       WHERE id = ${recording.id}
     `;
+    log.info("Datenbank aktualisiert");
 
     // Upload files and get links
     const storage = await getStorage();
+    const uploadedLinks = {
+      audio: [] as string[],
+      screen: [] as string[]
+    };
     
     // Upload audio files and send links
+    log.info("Starte Upload der Audiodateien...");
     for (const file of recording.audioFiles) {
-      const fileName = file.split('/').pop()!;
-      const link = await storage.uploadFile(file, `audio/${fileName}`);
-      recording.cloudLinks.audio.push(link);
+      try {
+        const fileName = file.split('/').pop()!;
+        const link = await storage.uploadFile(file, `audio/${fileName}`);
+        uploadedLinks.audio.push(link);
+        log.info("Audiodatei hochgeladen", { file: fileName, link });
+      } catch (error) {
+        log.error("Fehler beim Upload der Audiodatei:", error);
+      }
     }
 
     // Upload screen recording files if any
-    if (recording.screenRecording) {
+    if (recording.screenRecording && recording.screenFiles.length > 0) {
+      log.info("Starte Upload der Screencapture-Dateien...");
       for (const file of recording.screenFiles) {
-        const fileName = file.split('/').pop()!;
-        const link = await storage.uploadFile(file, `screen/${fileName}`);
-        recording.cloudLinks.screen.push(link);
+        try {
+          const fileName = file.split('/').pop()!;
+          const link = await storage.uploadFile(file, `screen/${fileName}`);
+          uploadedLinks.screen.push(link);
+          log.info("Screencapture hochgeladen", { file: fileName, link });
+        } catch (error) {
+          log.error("Fehler beim Upload der Screencapture:", error);
+        }
       }
     }
 
     // Format links for Discord message
-    let message = '⏹️ Aufnahme beendet!\n\n';
+    let message = '⏹️ **Aufnahme beendet!**\n\n';
     
-    if (recording.cloudLinks.audio.length > 0) {
+    if (uploadedLinks.audio.length > 0) {
       message += '🎙️ **Audio Aufnahmen:**\n';
-      recording.cloudLinks.audio.forEach((link, index) => {
+      uploadedLinks.audio.forEach((link, index) => {
         message += `${index + 1}. ${link}\n`;
       });
+    } else {
+      message += '❌ Keine Audiodateien wurden hochgeladen.\n';
     }
 
-    if (recording.cloudLinks.screen.length > 0) {
+    if (uploadedLinks.screen.length > 0) {
       message += '\n🖥️ **Screen Aufnahmen:**\n';
-      recording.cloudLinks.screen.forEach((link, index) => {
+      uploadedLinks.screen.forEach((link, index) => {
         message += `${index + 1}. ${link}\n`;
       });
     }
 
     // Send links in Discord
     await channel.send(message);
+    log.info("Upload-Links gesendet");
 
-    // Set end time
+    // Reset channel name
+    await channel.setName(channel.name.replace('🎙️ ', ''));
+    log.info("Channel-Name zurückgesetzt");
+
+    // Set end time and update cloud links
     recording.endedAt = new Date();
+    recording.cloudLinks = uploadedLinks;
 
     // Remove from active recordings
     activeRecordings.delete(channelId);
+    log.info("Aufnahme erfolgreich beendet");
 
     return recording;
   } catch (error) {
     log.error("Fehler beim Stoppen der Aufnahme:", error);
+    // Cleanup bei Fehler
+    const connection = getVoiceConnection(channelId);
+    if (connection) {
+      connection.destroy();
+      log.info("Voice-Verbindung nach Fehler getrennt");
+    }
+    activeRecordings.delete(channelId);
     throw error;
   }
 }
