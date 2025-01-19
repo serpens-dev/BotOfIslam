@@ -9,75 +9,77 @@ import {
   VoiceChannel,
   ChatInputCommandInteraction
 } from 'discord.js';
-import { 
-  startRecording, 
-  stopRecording, 
-  toggleScreenRecording, 
-  addHighlight 
-} from '../clients/voice';
 import log from "encore.dev/log";
+import { voice } from "~encore/clients";
+
+interface Recording {
+  id: number;
+  channelId: string;
+  startedAt: Date;
+  endedAt?: Date;
+  initiatorId: string;
+  screenRecording: boolean;
+  cloudLinks: {
+    audio: string[];
+    screen: string[];
+  };
+}
 
 export const recordingCommands = [
   new SlashCommandBuilder()
     .setName('record')
-    .setDescription('Startet eine Aufnahme im aktuellen Voice-Channel'),
+    .setDescription('Startet eine neue Aufnahme')
+    .toJSON(),
 
   new SlashCommandBuilder()
     .setName('stoprecord')
-    .setDescription('Stoppt die aktuelle Aufnahme'),
+    .setDescription('Stoppt die aktuelle Aufnahme')
+    .toJSON(),
 
   new SlashCommandBuilder()
     .setName('screen')
-    .setDescription('Aktiviert/Deaktiviert Screen Recording für die aktuelle Aufnahme'),
+    .setDescription('Aktiviert/Deaktiviert Screen Recording')
+    .toJSON(),
 
   new SlashCommandBuilder()
     .setName('highlight')
-    .setDescription('Setzt einen Highlight-Marker in der Aufnahme')
+    .setDescription('Markiert einen wichtigen Moment in der Aufnahme')
     .addStringOption(option =>
-      option.setName('beschreibung')
+      option
+        .setName('description')
         .setDescription('Beschreibung des Highlights')
         .setRequired(true)
     )
+    .toJSON()
 ];
 
 export async function handleRecordCommand(interaction: ChatInputCommandInteraction) {
   try {
-    const member = interaction.member as GuildMember;
-    const channel = member.voice.channel as VoiceChannel;
+    // Sofort bestätigen dass wir die Anfrage verarbeiten
+    await interaction.deferReply();
 
-    if (!channel) {
-      await interaction.reply({ 
-        content: 'Du musst in einem Voice Channel sein um eine Aufnahme zu starten!',
-        ephemeral: true 
-      });
+    const member = interaction.member as GuildMember;
+    const voiceChannel = member.voice.channel;
+
+    if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
+      await interaction.editReply('Du musst in einem Voice Channel sein um die Aufnahme zu starten.');
       return;
     }
 
-    // Sofort antworten
-    await interaction.reply({ 
-      content: 'Starte Aufnahme...',
-      ephemeral: true 
+    // Starte Aufnahme
+    const { recording } = await voice.startRecording({ 
+      channelId: voiceChannel.id,
+      initiatorId: member.id
     });
 
-    // Aufnahme im Hintergrund starten
-    const recording = await startRecording(
-      channel.id,
-      member.id,
-      channel.members.map(m => m.id)
-    );
-
-    // Erfolg in den Channel senden
-    await channel.send('🎙️ Aufnahme gestartet!');
+    await interaction.editReply('Aufnahme gestartet!');
 
   } catch (error: any) {
     log.error('Fehler beim Starten der Aufnahme:', error);
     
-    // Fehler als Follow-up senden
+    // Versuche Fehlermeldung zu senden
     try {
-      await interaction.followUp({ 
-        content: `Fehler beim Starten der Aufnahme: ${error.message}`,
-        ephemeral: true 
-      });
+      await interaction.editReply('Die Anwendung reagiert nicht');
     } catch (e) {
       log.error('Fehler beim Senden der Fehlermeldung:', e);
     }
@@ -85,79 +87,114 @@ export async function handleRecordCommand(interaction: ChatInputCommandInteracti
 }
 
 export async function handleStopRecordCommand(interaction: ChatInputCommandInteraction) {
-  const member = interaction.member as GuildMember;
-  if (!member.voice.channel || !(member.voice.channel instanceof VoiceChannel)) {
-    await interaction.reply({
-      content: 'Du musst im Voice-Channel sein um die Aufnahme zu stoppen!',
-      ephemeral: true
-    });
-    return;
-  }
-
   try {
-    const { recording } = await stopRecording(member.voice.channel.id);
-    await interaction.reply({
-      content: `Aufnahme gestoppt! Länge: ${formatDuration(new Date().getTime() - recording.startedAt.getTime())}`,
-      components: [] // Entferne alle Buttons
+    // Sofort bestätigen dass wir die Anfrage verarbeiten
+    await interaction.deferReply();
+
+    const member = interaction.member as GuildMember;
+    const voiceChannel = member.voice.channel;
+
+    if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
+      await interaction.editReply('Du musst in einem Voice Channel sein um die Aufnahme zu stoppen.');
+      return;
+    }
+
+    // Stoppe Aufnahme
+    const { recording } = await voice.stopRecording({ channelId: voiceChannel.id });
+    
+    // Formatiere Links für die Ausgabe
+    const audioLinks = recording.cloudLinks.audio.map((link: string, i: number) => 
+      `${i + 1}. ${link}`
+    ).join('\n');
+
+    const screenLinks = recording.cloudLinks.screen.length > 0 
+      ? '\n\nScreen Aufnahmen:\n' + recording.cloudLinks.screen.map((link: string, i: number) => 
+          `${i + 1}. ${link}`
+        ).join('\n')
+      : '';
+
+    // Sende Erfolg mit Links
+    await interaction.editReply({
+      content: `Aufnahme beendet!\n\nAudio Aufnahmen:\n${audioLinks}${screenLinks}`
     });
+
   } catch (error: any) {
     log.error('Fehler beim Stoppen der Aufnahme:', error);
-    await interaction.reply({
-      content: `Fehler beim Stoppen der Aufnahme: ${error.message || 'Unbekannter Fehler'}`,
-      ephemeral: true
-    });
+    
+    // Versuche Fehlermeldung zu senden
+    try {
+      await interaction.editReply('Die Anwendung reagiert nicht');
+    } catch (e) {
+      log.error('Fehler beim Senden der Fehlermeldung:', e);
+    }
   }
 }
 
 export async function handleScreenCommand(interaction: ChatInputCommandInteraction) {
-  const member = interaction.member as GuildMember;
-  if (!member.voice.channel || !(member.voice.channel instanceof VoiceChannel)) {
-    await interaction.reply({
-      content: 'Du musst im Voice-Channel sein um Screen Recording zu ändern!',
-      ephemeral: true
-    });
-    return;
-  }
-
   try {
-    const { enabled } = await toggleScreenRecording(member.voice.channel.id);
-    await interaction.reply({
-      content: `Screen Recording ${enabled ? 'aktiviert' : 'deaktiviert'}!`,
-      ephemeral: true
-    });
+    // Sofort bestätigen dass wir die Anfrage verarbeiten
+    await interaction.deferReply();
+
+    const member = interaction.member as GuildMember;
+    const voiceChannel = member.voice.channel;
+
+    if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
+      await interaction.editReply('Du musst in einem Voice Channel sein um Screen Recording zu aktivieren.');
+      return;
+    }
+
+    // Toggle Screen Recording
+    const { enabled } = await voice.toggleScreenRecording({ channelId: voiceChannel.id });
+    
+    await interaction.editReply(
+      enabled ? 'Screen Recording aktiviert!' : 'Screen Recording deaktiviert!'
+    );
+
   } catch (error: any) {
-    log.error('Fehler beim Ändern des Screen Recordings:', error);
-    await interaction.reply({
-      content: `Fehler beim Ändern des Screen Recordings: ${error.message || 'Unbekannter Fehler'}`,
-      ephemeral: true
-    });
+    log.error('Fehler beim Togglen des Screen Recordings:', error);
+    
+    // Versuche Fehlermeldung zu senden
+    try {
+      await interaction.editReply('Die Anwendung reagiert nicht');
+    } catch (e) {
+      log.error('Fehler beim Senden der Fehlermeldung:', e);
+    }
   }
 }
 
 export async function handleHighlightCommand(interaction: ChatInputCommandInteraction) {
-  const member = interaction.member as GuildMember;
-  if (!member.voice.channel || !(member.voice.channel instanceof VoiceChannel)) {
-    await interaction.reply({
-      content: 'Du musst im Voice-Channel sein um einen Highlight zu setzen!',
-      ephemeral: true
-    });
-    return;
-  }
-
-  const description = interaction.options.getString('beschreibung', true);
-
   try {
-    const { highlight } = await addHighlight(member.voice.channel.id, description, member.id);
-    await interaction.reply({
-      content: `Highlight gesetzt: "${description}" bei ${formatTimestamp(highlight.timestamp)}`,
-      ephemeral: true
+    // Sofort bestätigen dass wir die Anfrage verarbeiten
+    await interaction.deferReply();
+
+    const member = interaction.member as GuildMember;
+    const voiceChannel = member.voice.channel;
+
+    if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
+      await interaction.editReply('Du musst in einem Voice Channel sein um ein Highlight zu setzen.');
+      return;
+    }
+
+    const description = interaction.options.getString('description', true);
+
+    // Füge Highlight hinzu
+    const { highlight } = await voice.addHighlight({ 
+      channelId: voiceChannel.id,
+      description,
+      userId: member.id
     });
+    
+    await interaction.editReply(`Highlight gesetzt: ${description}`);
+
   } catch (error: any) {
     log.error('Fehler beim Setzen des Highlights:', error);
-    await interaction.reply({
-      content: `Fehler beim Setzen des Highlights: ${error.message || 'Unbekannter Fehler'}`,
-      ephemeral: true
-    });
+    
+    // Versuche Fehlermeldung zu senden
+    try {
+      await interaction.editReply('Die Anwendung reagiert nicht');
+    } catch (e) {
+      log.error('Fehler beim Senden der Fehlermeldung:', e);
+    }
   }
 }
 
