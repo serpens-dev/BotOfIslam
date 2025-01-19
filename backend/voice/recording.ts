@@ -15,9 +15,10 @@ import { startScreenRecording, stopScreenRecording } from './screenRecorder';
 import { getStorage } from './storage';
 import { createHighlightClips } from './clipGenerator';
 import { VoiceDB } from './encore.service';
+import { Recording, Highlight } from "./types";
 
 interface RecordingSession {
-  id: number;                    // Datenbank ID
+  id: string;                    // Datenbank ID
   channelId: string;
   startTime: Date;
   initiatorId: string;
@@ -34,302 +35,138 @@ interface RecordingSession {
   };
 }
 
-interface Highlight {
-  timestamp: Date;
-  description: string;
-  clipPath?: string; // Optional, wenn ein Clip erstellt wurde
-  createdBy: string; // User ID
-}
+const activeRecordings = new Map<string, Recording>();
 
-const activeRecordings = new Map<string, RecordingSession>();
-
-export async function startRecording(channelId: string, initiatorId: string): Promise<RecordingSession> {
+export async function startRecording(channelId: string, initiatorId: string): Promise<Recording> {
   try {
-    const channel = await getVoiceChannel(channelId);
-    const initiator = await channel.guild.members.fetch(initiatorId);
-
-    // Prüfe ob bereits eine Aufnahme läuft
-    if (activeRecordings.has(channelId)) {
-      throw new Error('Es läuft bereits eine Aufnahme in diesem Channel');
-    }
-
-    // Erstelle Aufnahme in der Datenbank
-    const row = await VoiceDB.queryRow<{ id: number }>`
-      INSERT INTO recordings (
-        channel_id,
-        started_at,
-        initiator_id,
-        screen_recording
-      ) VALUES (
-        ${channelId},
-        NOW(),
-        ${initiatorId},
-        false
-      )
+    // Create new recording in database
+    const result = await VoiceDB.queryRow<{ id: number }>`
+      INSERT INTO recordings (channel_id, initiator_id, started_at)
+      VALUES (${channelId}, ${initiatorId}, NOW())
       RETURNING id
     `;
 
-    if (!row?.id) {
-      throw new Error('Fehler beim Erstellen der Aufnahme in der Datenbank');
+    if (!result) {
+      throw new Error("Fehler beim Erstellen der Aufnahme");
     }
 
-    // Erstelle neue Aufnahme Session
-    const session: RecordingSession = {
-      id: row.id,
-      channelId: channel.id,
-      startTime: new Date(),
-      initiatorId: initiator.id,
-      participants: new Set(channel.members.map(m => m.id)),
+    // Initialize recording session
+    const recording: Recording = {
+      id: result.id.toString(),
+      channelId,
+      initiatorId,
+      startedAt: new Date(),
+      screenRecording: false,
       audioFiles: [],
       screenFiles: [],
-      highlights: [],
-      screenRecordingEnabled: false,
-      screenRecording: false,
-      lastConfirmation: new Date(),
       cloudLinks: {
         audio: [],
         screen: []
-      }
+      },
+      lastConfirmation: new Date(),
+      participants: [],
+      highlights: [],
+      startTime: new Date()
     };
 
-    // Speichere Session VOR dem Start der Aufnahme
-    activeRecordings.set(channelId, session);
+    // Save to active recordings
+    activeRecordings.set(channelId, recording);
 
-    // Starte Audio Aufnahme
-    const connection = await startAudioRecording(channel);
-    
-    // Warte kurz um sicherzustellen dass die Aufnahme initialisiert ist
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Aktualisiere Channel Namen
-    await channel.setName(`🔴 ${channel.name}`);
-
-    return session;
+    return recording;
   } catch (error) {
-    // Bei Fehler Session wieder entfernen
-    activeRecordings.delete(channelId);
-    log.error('Fehler beim Starten der Aufnahme:', error);
+    log.error("Fehler beim Starten der Aufnahme:", error);
     throw error;
   }
 }
 
-export async function stopRecording(channelId: string) {
-  const session = activeRecordings.get(channelId);
-  if (!session) {
-    throw new Error('Keine aktive Aufnahme in diesem Channel');
+export async function stopRecording(channelId: string): Promise<Recording> {
+  const recording = activeRecordings.get(channelId);
+  if (!recording) {
+    throw new Error("Keine aktive Aufnahme in diesem Channel");
   }
 
   try {
-    const channel = await getVoiceChannel(channelId);
-    
-    // Stoppe Audio Aufnahme
-    const audioFiles = await stopAudioRecording(channelId);
-    session.audioFiles = audioFiles;
-
-    // Stoppe Screen Recordings falls aktiv
-    if (session.screenRecording) {
-      for (const participant of session.participants) {
-        const screenFile = await stopScreenRecording(participant);
-        if (screenFile) {
-          session.screenFiles.push(screenFile);
-        }
-      }
-    }
-
-    // Upload Dateien zu Mega
-    const storage = getStorage();
-    
-    // Upload Audio Files
-    for (const audioFile of session.audioFiles) {
-      const fileName = audioFile.split('/').pop()!;
-      const link = await storage.uploadFile(audioFile, `audio/${fileName}`);
-      session.cloudLinks.audio.push(link);
-
-      // Update Teilnehmer in der Datenbank
-      await VoiceDB.exec`
-        UPDATE recording_participants
-        SET 
-          audio_file_path = ${audioFile},
-          cloud_audio_link = ${link}
-        WHERE recording_id = ${session.id}
-          AND user_id = ${fileName.split('_')[0]} -- User ID ist Teil des Dateinamens
-      `;
-    }
-
-    // Upload Screen Files
-    for (const screenFile of session.screenFiles) {
-      const fileName = screenFile.split('/').pop()!;
-      const link = await storage.uploadFile(screenFile, `screen/${fileName}`);
-      session.cloudLinks.screen.push(link);
-
-      // Update Teilnehmer in der Datenbank
-      await VoiceDB.exec`
-        UPDATE recording_participants
-        SET 
-          screen_file_path = ${screenFile},
-          cloud_screen_link = ${link}
-        WHERE recording_id = ${session.id}
-          AND user_id = ${fileName.split('_')[0]} -- User ID ist Teil des Dateinamens
-      `;
-    }
-
-    // Erstelle Highlight Clips falls vorhanden
-    let highlightClips: Array<{ description: string; link: string }> = [];
-    if (session.highlights.length > 0 && session.audioFiles.length > 0) {
-      highlightClips = await createHighlightClips(
-        session.audioFiles[0], // Nutze erste Audio Datei
-        session.highlights,
-        session.startTime
-      );
-
-      // Update Highlights in der Datenbank
-      for (let i = 0; i < session.highlights.length; i++) {
-        const highlight = session.highlights[i];
-        const clip = highlightClips[i];
-
-        if (clip) {
-          await VoiceDB.exec`
-            UPDATE highlights
-            SET cloud_clip_link = ${clip.link}
-            WHERE recording_id = ${session.id}
-              AND created_by = ${highlight.createdBy}
-              AND description = ${highlight.description}
-          `;
-        }
-      }
-    }
-
-    // Update Aufnahme Status in der Datenbank
+    // Update recording in database
     await VoiceDB.exec`
-      UPDATE recordings
-      SET 
-        ended_at = NOW(),
-        screen_recording = ${session.screenRecording}
-      WHERE id = ${session.id}
+      UPDATE recordings 
+      SET ended_at = NOW()
+      WHERE id = ${recording.id}
     `;
 
-    // Entferne Aufnahme-Emoji vom Channel Namen
-    await channel.setName(channel.name.replace('🔴 ', ''));
+    // Upload files and get links
+    const storage = await getStorage();
     
-    // Sende Links in den Channel
-    let message = '**Aufnahme beendet!**\n\n';
-    
-    if (session.cloudLinks.audio.length > 0) {
-      message += '**Audio Aufnahmen:**\n';
-      session.cloudLinks.audio.forEach((link, i) => {
-        message += `${i + 1}. ${link}\n`;
-      });
+    // Upload audio files
+    for (const file of recording.audioFiles) {
+      const fileName = file.split('/').pop()!;
+      const link = await storage.uploadFile(file, `audio/${fileName}`);
+      recording.cloudLinks.audio.push(link);
     }
 
-    if (session.cloudLinks.screen.length > 0) {
-      message += '\n**Screen Recordings:**\n';
-      session.cloudLinks.screen.forEach((link, i) => {
-        message += `${i + 1}. ${link}\n`;
-      });
+    // Upload screen recording files if any
+    if (recording.screenRecording) {
+      for (const file of recording.screenFiles) {
+        const fileName = file.split('/').pop()!;
+        const link = await storage.uploadFile(file, `screen/${fileName}`);
+        recording.cloudLinks.screen.push(link);
+      }
     }
 
-    if (highlightClips.length > 0) {
-      message += '\n**Highlight Clips:**\n';
-      highlightClips.forEach((clip, i) => {
-        message += `${i + 1}. ${clip.description}: ${clip.link}\n`;
-      });
-    }
+    // Set end time
+    recording.endedAt = new Date();
 
-    await channel.send(message);
-
-    // Cleanup
+    // Remove from active recordings
     activeRecordings.delete(channelId);
 
-    log.info('Aufnahme gestoppt', {
-      channel: channel.name,
-      duration: new Date().getTime() - session.startTime.getTime(),
-      audioFiles: session.audioFiles,
-      screenFiles: session.screenFiles,
-      cloudLinks: session.cloudLinks,
-      highlightClips,
-      recordingId: session.id
-    });
-
-    return session;
+    return recording;
   } catch (error) {
-    log.error('Fehler beim Stoppen der Aufnahme:', error);
+    log.error("Fehler beim Stoppen der Aufnahme:", error);
     throw error;
   }
 }
 
-export async function toggleScreenRecording(channelId: string) {
-  const session = activeRecordings.get(channelId);
-  if (!session) {
-    throw new Error('Keine aktive Aufnahme in diesem Channel');
+export async function toggleScreenRecording(channelId: string): Promise<boolean> {
+  const recording = activeRecordings.get(channelId);
+  if (!recording) {
+    throw new Error("Keine aktive Aufnahme in diesem Channel");
+  }
+
+  recording.screenRecording = !recording.screenRecording;
+  return recording.screenRecording;
+}
+
+export async function addHighlight(channelId: string, description: string, userId: string): Promise<Highlight> {
+  const recording = activeRecordings.get(channelId);
+  if (!recording) {
+    throw new Error("Keine aktive Aufnahme in diesem Channel");
   }
 
   try {
-    if (!session.screenRecording) {
-      // Starte Screen Recording für alle Teilnehmer
-      for (const participant of session.participants) {
-        await startScreenRecording(channelId, participant, `https://discord.com/channels/${channelId}/${participant}`);
-      }
-      session.screenRecording = true;
-    } else {
-      // Stoppe Screen Recording für alle Teilnehmer
-      for (const participant of session.participants) {
-        const screenFile = await stopScreenRecording(participant);
-        if (screenFile) {
-          session.screenFiles.push(screenFile);
-        }
-      }
-      session.screenRecording = false;
-    }
-
-    // Update Screen Recording Status in der Datenbank
-    await VoiceDB.exec`
-      UPDATE recordings
-      SET screen_recording = ${session.screenRecording}
-      WHERE id = ${session.id}
+    // Create highlight in database
+    const result = await VoiceDB.queryRow<{ id: number }>`
+      INSERT INTO highlights (recording_id, description, user_id, timestamp)
+      VALUES (${recording.id}, ${description}, ${userId}, NOW())
+      RETURNING id, timestamp
     `;
 
-    return session.screenRecording;
-  } catch (error) {
-    log.error('Fehler beim Ändern des Screen Recordings:', error);
-    throw error;
-  }
-}
+    if (!result) {
+      throw new Error("Fehler beim Erstellen des Highlights");
+    }
 
-export async function addHighlight(
-  channelId: string,
-  description: string,
-  userId: string
-) {
-  const session = activeRecordings.get(channelId);
-  if (!session) {
-    throw new Error('Keine aktive Aufnahme in diesem Channel');
-  }
-
-  const highlight: Highlight = {
-    timestamp: new Date(),
-    description,
-    createdBy: userId
-  };
-
-  // Füge Highlight zur Session hinzu
-  session.highlights.push(highlight);
-
-  // Speichere Highlight in der Datenbank
-  await VoiceDB.exec`
-    INSERT INTO highlights (
-      recording_id,
-      timestamp,
+    const createdHighlight: Highlight = {
+      id: result.id.toString(),
+      recordingId: recording.id,
+      timestamp: new Date(),
       description,
-      created_by
-    ) VALUES (
-      ${session.id},
-      ${highlight.timestamp},
-      ${description},
-      ${userId}
-    )
-  `;
+      userId,
+      createdBy: userId
+    };
 
-  return highlight;
+    return createdHighlight;
+  } catch (error) {
+    log.error("Fehler beim Setzen des Highlights:", error);
+    throw error;
+  }
 }
 
 async function startConfirmationTimer(channel: VoiceChannel) {
