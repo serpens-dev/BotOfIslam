@@ -26,7 +26,12 @@ const __dirname = dirname(__filename);
 const activeRecordings = new Map<string, {
   connection: VoiceConnection;
   stream: any;
+  audioFiles: string[];
 }>();
+
+interface AudioRecording {
+  audioFiles: string[];
+}
 
 export async function startAudioRecording(connection: VoiceConnection, recordingId: string) {
   try {
@@ -39,23 +44,23 @@ export async function startAudioRecording(connection: VoiceConnection, recording
       throw new Error("Keine Channel ID in der Voice Connection gefunden");
     }
     
+    // Create recordings directory
+    await mkdir(recordingsPath, { recursive: true });
+    log.info("Aufnahmeverzeichnis erstellt", { path: recordingsPath });
+
     // Speichere die aktive Aufnahme
     activeRecordings.set(channelId, {
       connection,
-      stream: receiver
+      stream: receiver,
+      audioFiles: [] as string[]
     });
 
-    log.info("Audio-Aufnahme gestartet", { channelId });
-
-    // Create recordings directory
-    await mkdir(recordingsPath, { recursive: true });
-
-    // Create audio player
-    const player = createAudioPlayer();
-    connection.subscribe(player);
+    log.info("Audio-Aufnahme initialisiert", { channelId });
 
     // Start recording for each speaking user
     connection.receiver.speaking.on('start', async (userId) => {
+      log.info("Benutzer spricht", { userId });
+      
       const audioStream = receiver.subscribe(userId, {
         end: {
           behavior: EndBehaviorType.AfterSilence,
@@ -67,9 +72,17 @@ export async function startAudioRecording(connection: VoiceConnection, recording
       const filePath = join(recordingsPath, fileName);
       const fileStream = createWriteStream(filePath);
 
+      log.info("Neue Audiodatei erstellt", { fileName, filePath });
+
       try {
         // Convert AudioReceiveStream to Node.js Readable
         const nodeStream = Readable.from(audioStream as unknown as AsyncIterable<any>);
+        
+        // Speichere den Dateipfad
+        const recording = activeRecordings.get(channelId);
+        if (recording) {
+          recording.audioFiles.push(filePath);
+        }
         
         // Handle stream events
         nodeStream.on('data', (chunk) => {
@@ -78,39 +91,21 @@ export async function startAudioRecording(connection: VoiceConnection, recording
 
         nodeStream.on('end', async () => {
           fileStream.end();
-          
-          try {
-            // Upload to Mega after recording is complete
-            const storage = getStorage();
-            const cloudPath = `audio/${fileName}`;
-            const link = await storage.uploadFile(filePath, cloudPath);
-            
-            log.info('Aufnahme erfolgreich hochgeladen:', {
-              userId,
-              fileName,
-              cloudLink: link
-            });
-          } catch (uploadError) {
-            log.error('Fehler beim Hochladen der Aufnahme:', {
-              error: uploadError,
-              userId,
-              fileName
-            });
-          }
+          log.info("Audioaufnahme gespeichert", { filePath });
         });
 
         // Handle errors
         nodeStream.on('error', (error) => {
-          log.error(`Error in audio stream for user ${userId}:`, error);
+          log.error("Fehler im Audio-Stream", { userId, error });
           fileStream.end();
         });
 
         fileStream.on('error', (error) => {
-          log.error(`Error writing audio file for user ${userId}:`, error);
+          log.error("Fehler beim Schreiben der Audiodatei", { userId, error });
         });
 
       } catch (error) {
-        log.error(`Error recording audio for user ${userId}:`, error);
+        log.error("Fehler bei der Audioaufnahme", { userId, error });
       }
     });
 
@@ -121,12 +116,12 @@ export async function startAudioRecording(connection: VoiceConnection, recording
   }
 }
 
-export async function stopAudioRecording(channelId: string) {
+export async function stopAudioRecording(channelId: string): Promise<AudioRecording | null> {
   try {
     const recording = activeRecordings.get(channelId);
     if (!recording) {
       log.warn("Keine aktive Audio-Aufnahme gefunden", { channelId });
-      return;
+      return null;
     }
 
     // Stoppe die Aufnahme
@@ -139,10 +134,16 @@ export async function stopAudioRecording(channelId: string) {
       log.info("Voice-Verbindung getrennt");
     }
     
+    // Speichere die Audiodateien
+    const audioFiles = recording.audioFiles;
+    
     // Entferne die Aufnahme aus der Map
     activeRecordings.delete(channelId);
     
-    log.info("Audio-Aufnahme gestoppt", { channelId });
+    log.info("Audio-Aufnahme gestoppt", { channelId, fileCount: audioFiles.length });
+
+    // Gebe die Audiodateien zurück
+    return { audioFiles };
   } catch (error) {
     log.error("Fehler beim Stoppen der Audio-Aufnahme:", error);
     throw error;

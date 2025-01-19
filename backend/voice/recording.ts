@@ -177,8 +177,17 @@ export async function stopRecording(channelId: string): Promise<Recording> {
   try {
     log.info("Stoppe Aufnahme...");
 
+    // Get voice channel for notifications
+    const channel = await fetchVoiceChannel(channelId);
+    if (!channel) {
+      throw new Error("Voice Channel nicht gefunden");
+    }
+
+    // Sende initiale Stopp-Nachricht
+    const stopMsg = await channel.send("⏹️ Stoppe Aufnahme...");
+
     // Stoppe die Audio-Aufnahme
-    await stopAudioRecording(channelId);
+    const audioRecordingResult = await stopAudioRecording(channelId);
     log.info("Audio-Aufnahme gestoppt");
 
     // Delete start message if it exists
@@ -186,19 +195,6 @@ export async function stopRecording(channelId: string): Promise<Recording> {
     if (startMsg) {
       await startMsg.delete().catch(() => {});
       startMessages.delete(channelId);
-    }
-
-    // Get voice channel for notifications
-    const channel = await fetchVoiceChannel(channelId);
-    if (!channel) {
-      throw new Error("Voice Channel nicht gefunden");
-    }
-
-    // Disconnect from voice channel
-    const connection = getVoiceConnection(channelId);
-    if (connection) {
-      connection.destroy();
-      log.info("Voice-Verbindung getrennt");
     }
 
     // Update recording in database
@@ -216,32 +212,25 @@ export async function stopRecording(channelId: string): Promise<Recording> {
       screen: [] as string[]
     };
     
+    // Aktualisiere die Stopp-Nachricht
+    await stopMsg.edit("⏳ Lade Aufnahmen hoch...");
+    
     // Upload audio files and send links
-    log.info("Starte Upload der Audiodateien...");
-    for (const file of recording.audioFiles) {
-      try {
-        const fileName = file.split('/').pop()!;
-        const link = await storage.uploadFile(file, `audio/${fileName}`);
-        uploadedLinks.audio.push(link);
-        log.info("Audiodatei hochgeladen", { file: fileName, link });
-      } catch (error) {
-        log.error("Fehler beim Upload der Audiodatei:", error);
-      }
-    }
-
-    // Upload screen recording files if any
-    if (recording.screenRecording && recording.screenFiles.length > 0) {
-      log.info("Starte Upload der Screencapture-Dateien...");
-      for (const file of recording.screenFiles) {
+    if (audioRecordingResult && audioRecordingResult.audioFiles && audioRecordingResult.audioFiles.length > 0) {
+      const { audioFiles } = audioRecordingResult;
+      log.info("Starte Upload der Audiodateien...", { count: audioFiles.length });
+      for (const file of audioFiles) {
         try {
           const fileName = file.split('/').pop()!;
-          const link = await storage.uploadFile(file, `screen/${fileName}`);
-          uploadedLinks.screen.push(link);
-          log.info("Screencapture hochgeladen", { file: fileName, link });
+          const link = await storage.uploadFile(file, `audio/${fileName}`);
+          uploadedLinks.audio.push(link);
+          log.info("Audiodatei hochgeladen", { file: fileName, link });
         } catch (error) {
-          log.error("Fehler beim Upload der Screencapture:", error);
+          log.error("Fehler beim Upload der Audiodatei:", error);
         }
       }
+    } else {
+      log.warn("Keine Audiodateien zum Hochladen gefunden");
     }
 
     // Format links for Discord message
@@ -253,18 +242,11 @@ export async function stopRecording(channelId: string): Promise<Recording> {
         message += `${index + 1}. ${link}\n`;
       });
     } else {
-      message += '❌ Keine Audiodateien wurden hochgeladen.\n';
+      message += '❌ Keine Audiodateien wurden aufgenommen oder hochgeladen.\n';
     }
 
-    if (uploadedLinks.screen.length > 0) {
-      message += '\n🖥️ **Screen Aufnahmen:**\n';
-      uploadedLinks.screen.forEach((link, index) => {
-        message += `${index + 1}. ${link}\n`;
-      });
-    }
-
-    // Send links in Discord
-    await channel.send(message);
+    // Update final message
+    await stopMsg.edit(message);
     log.info("Upload-Links gesendet");
 
     // Reset channel name
