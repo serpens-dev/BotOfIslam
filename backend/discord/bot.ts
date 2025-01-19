@@ -3,7 +3,7 @@ import log from "encore.dev/log";
 import { handleCommand } from './handlers/commandHandler';
 import { handleButton } from './handlers/buttonHandler';
 import { handleModal } from './handlers/modalHandler';
-import { registerCommands } from './commands';
+import { commands } from './commands';
 import { DISCORD_BOT_TOKEN } from './config';
 import { initializeStorage } from '../voice/storage';
 
@@ -18,14 +18,23 @@ const client = new Client({
 });
 
 // Bot Ready Event
-client.once(Events.ClientReady, (readyClient) => {
-  log.info(`Bot ist bereit! Eingeloggt als ${readyClient.user.tag}`);
+client.once(Events.ClientReady, async () => {
+  log.info('Bot ist bereit!');
+
+  try {
+    // Registriere Commands
+    const commandData = commands.map(command => command.toJSON());
+    await client.application?.commands.set(commandData);
+    log.info('Commands erfolgreich registriert!');
+  } catch (error) {
+    log.error('Fehler beim Registrieren der Commands:', error);
+  }
 });
 
 // Command Handler
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    if (interaction.isCommand()) {
+    if (interaction.isChatInputCommand()) {
       await handleCommand(interaction);
     } else if (interaction.isButton()) {
       await handleButton(interaction);
@@ -37,26 +46,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// Bot starten
-export async function startBot() {
-  try {
-    log.info("Starte Bot...");
+// Initialisiere Storage
+initializeStorage({
+  email: process.env.MEGA_EMAIL!,
+  password: process.env.MEGA_PASSWORD!,
+  uploadFolder: process.env.MEGA_UPLOAD_FOLDER || '/recordings'
+});
 
-    // Initialisiere Storage
-    await initializeStorage({
-      email: process.env.MEGA_EMAIL!,
-      password: process.env.MEGA_PASSWORD!,
-      uploadFolder: process.env.MEGA_UPLOAD_FOLDER || '/recordings'
-    });
-
-    // Registriere Commands und starte Bot
-    await registerCommands();
-    await client.login(DISCORD_BOT_TOKEN);
-    log.info("Bot wurde erfolgreich gestartet");
-  } catch (error) {
-    log.error("Fehler beim Starten des Bots:", error);
-    throw error;
-  }
-}
+// Login
+client.login(DISCORD_BOT_TOKEN);
 
 export { client }; 
