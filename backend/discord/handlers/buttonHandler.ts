@@ -1,5 +1,5 @@
 import { ButtonInteraction, GuildMember, VoiceChannel } from 'discord.js';
-import { toggleScreenRecording, addHighlight, stopRecording } from '../../voice/recording';
+import { toggleScreenRecording, stopRecording } from '../clients/voice';
 import log from "encore.dev/log";
 
 export async function handleButton(interaction: ButtonInteraction) {
@@ -17,9 +17,9 @@ export async function handleButton(interaction: ButtonInteraction) {
   try {
     switch (interaction.customId) {
       case 'screen_record':
-        const isEnabled = await toggleScreenRecording(member.voice.channel.id);
+        const { enabled } = await toggleScreenRecording(member.voice.channel.id);
         await interaction.reply({
-          content: `Screen Recording ${isEnabled ? 'aktiviert' : 'deaktiviert'}!`,
+          content: `Screen Recording ${enabled ? 'aktiviert' : 'deaktiviert'}!`,
           ephemeral: true
         });
         break;
@@ -46,9 +46,9 @@ export async function handleButton(interaction: ButtonInteraction) {
         break;
 
       case 'stop_recording':
-        const session = await stopRecording(member.voice.channel.id);
+        const { recording } = await stopRecording(member.voice.channel.id);
         await interaction.reply({
-          content: `Aufnahme gestoppt! Länge: ${formatDuration(new Date().getTime() - session.startTime.getTime())}`,
+          content: `Aufnahme gestoppt! Länge: ${formatDuration(new Date().getTime() - recording.startedAt.getTime())}`,
           components: [] // Entferne alle Buttons
         });
         break;

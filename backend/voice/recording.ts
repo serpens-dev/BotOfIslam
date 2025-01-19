@@ -43,13 +43,16 @@ interface Highlight {
 const activeRecordings = new Map<string, RecordingSession>();
 
 export async function startRecording(
-  voiceChannel: VoiceChannel,
-  initiator: GuildMember,
+  channelId: string,
+  initiatorId: string,
   participants?: string[]
 ) {
+  const channel = await getVoiceChannel(channelId);
+  const initiator = await channel.guild.members.fetch(initiatorId);
+  
   try {
     // Prüfe ob bereits eine Aufnahme läuft
-    if (activeRecordings.has(voiceChannel.id)) {
+    if (activeRecordings.has(channelId)) {
       throw new Error('Es läuft bereits eine Aufnahme in diesem Channel');
     }
 
@@ -61,9 +64,9 @@ export async function startRecording(
         initiator_id,
         screen_recording
       ) VALUES (
-        ${voiceChannel.id},
+        ${channelId},
         NOW(),
-        ${initiator.id},
+        ${initiatorId},
         false
       )
       RETURNING id
@@ -88,19 +91,19 @@ export async function startRecording(
     }
 
     // Setze Channel Name
-    const originalName = voiceChannel.name;
-    await voiceChannel.setName(`🔴 ${originalName}`);
+    const originalName = channel.name;
+    await channel.setName(`🔴 ${originalName}`);
 
     // Starte Audio Aufnahme
-    await startAudioRecording(voiceChannel, participants);
+    await startAudioRecording(channel, participants);
 
     // Erstelle neue Recording Session
     const session: RecordingSession = {
       id: row.id,
-      channelId: voiceChannel.id,
+      channelId: channelId,
       participants: new Set(participantIds),
       startTime: new Date(),
-      filePath: `recordings/${voiceChannel.id}_${Date.now()}.webm`,
+      filePath: `recordings/${channelId}_${Date.now()}.webm`,
       screenRecording: false,
       highlights: [],
       lastConfirmation: new Date(),
@@ -112,13 +115,13 @@ export async function startRecording(
       }
     };
 
-    activeRecordings.set(voiceChannel.id, session);
+    activeRecordings.set(channelId, session);
 
     // Starte Confirmation Timer
-    startConfirmationTimer(voiceChannel);
+    startConfirmationTimer(channel);
 
     log.info('Aufnahme gestartet', {
-      channel: voiceChannel.name,
+      channel: channel.name,
       initiator: initiator.user.tag,
       recordingId: session.id
     });

@@ -1,5 +1,11 @@
 import { api } from "encore.dev/api";
 import { VoiceDB } from "./encore.service";
+import { 
+  startRecording as startRecordingImpl,
+  stopRecording as stopRecordingImpl,
+  toggleScreenRecording as toggleScreenRecordingImpl,
+  addHighlight as addHighlightImpl
+} from "./recording";
 
 // API Typen
 interface Recording {
@@ -34,9 +40,104 @@ interface DBRecordingRow {
   highlights: string; // JSON String
 }
 
+interface StartRecordingParams {
+  channelId: string;
+  initiatorId: string;
+  participants?: string[];
+}
+
+interface StopRecordingParams {
+  channelId: string;
+}
+
+interface ToggleScreenParams {
+  channelId: string;
+}
+
+interface AddHighlightParams {
+  channelId: string;
+  description: string;
+  userId: string;
+}
+
 interface GetRecordingParams {
   id: string;
 }
+
+// Starte eine neue Aufnahme
+export const startRecording = api<StartRecordingParams>(
+  { method: "POST", path: "/recordings/start" },
+  async ({ channelId, initiatorId, participants }): Promise<{ recording: Recording }> => {
+    const session = await startRecordingImpl(channelId, initiatorId, participants);
+    return { 
+      recording: {
+        id: session.id,
+        channelId: session.channelId,
+        startedAt: session.startTime,
+        initiatorId,
+        screenRecording: session.screenRecording,
+        participants: Array.from(session.participants).map(userId => ({ userId })),
+        highlights: []
+      }
+    };
+  }
+);
+
+// Stoppe eine Aufnahme
+export const stopRecording = api<StopRecordingParams>(
+  { method: "POST", path: "/recordings/:channelId/stop" },
+  async ({ channelId }): Promise<{ recording: Recording }> => {
+    const session = await stopRecordingImpl(channelId);
+    return {
+      recording: {
+        id: session.id,
+        channelId: session.channelId,
+        startedAt: session.startTime,
+        endedAt: new Date(),
+        initiatorId: Array.from(session.participants)[0], // Erster Teilnehmer ist der Initiator
+        screenRecording: session.screenRecording,
+        participants: Array.from(session.participants).map(userId => ({
+          userId,
+          audioLink: session.cloudLinks.audio.find(link => link.includes(userId)),
+          screenLink: session.cloudLinks.screen.find(link => link.includes(userId))
+        })),
+        highlights: session.highlights.map((h, id) => ({
+          id,
+          timestamp: h.timestamp,
+          description: h.description,
+          createdBy: h.createdBy,
+          clipPath: h.clipPath
+        }))
+      }
+    };
+  }
+);
+
+// Toggle Screen Recording
+export const toggleScreen = api<ToggleScreenParams>(
+  { method: "POST", path: "/recordings/:channelId/screen" },
+  async ({ channelId }): Promise<{ enabled: boolean }> => {
+    const enabled = await toggleScreenRecordingImpl(channelId);
+    return { enabled };
+  }
+);
+
+// Füge einen Highlight hinzu
+export const addHighlight = api<AddHighlightParams>(
+  { method: "POST", path: "/recordings/:channelId/highlights" },
+  async ({ channelId, description, userId }): Promise<{ highlight: Recording['highlights'][0] }> => {
+    const highlight = await addHighlightImpl(channelId, description, userId);
+    return {
+      highlight: {
+        id: 0, // Wird in der Datenbank generiert
+        timestamp: highlight.timestamp,
+        description: highlight.description,
+        createdBy: highlight.createdBy,
+        clipLink: highlight.clipPath
+      }
+    };
+  }
+);
 
 // Liste alle Aufnahmen
 export const listRecordings = api(

@@ -14,7 +14,7 @@ import {
   stopRecording, 
   toggleScreenRecording, 
   addHighlight 
-} from '../../voice/recording';
+} from '../clients/voice';
 import log from "encore.dev/log";
 
 export const recordingCommands = [
@@ -59,7 +59,11 @@ export async function handleRecordCommand(interaction: ChatInputCommandInteracti
     const selectedUser = interaction.options.getUser('user');
     const participants = selectedUser ? [selectedUser.id] : undefined;
 
-    const session = await startRecording(member.voice.channel, member, participants);
+    const { recording } = await startRecording(
+      member.voice.channel.id,
+      member.id,
+      participants
+    );
     
     const row = new ActionRowBuilder<ButtonBuilder>()
       .addComponents(
@@ -101,9 +105,9 @@ export async function handleStopRecordCommand(interaction: ChatInputCommandInter
   }
 
   try {
-    const session = await stopRecording(member.voice.channel.id);
+    const { recording } = await stopRecording(member.voice.channel.id);
     await interaction.reply({
-      content: `Aufnahme gestoppt! Länge: ${formatDuration(new Date().getTime() - session.startTime.getTime())}`,
+      content: `Aufnahme gestoppt! Länge: ${formatDuration(new Date().getTime() - recording.startedAt.getTime())}`,
       components: [] // Entferne alle Buttons
     });
   } catch (error: any) {
@@ -126,9 +130,9 @@ export async function handleScreenCommand(interaction: ChatInputCommandInteracti
   }
 
   try {
-    const isEnabled = await toggleScreenRecording(member.voice.channel.id);
+    const { enabled } = await toggleScreenRecording(member.voice.channel.id);
     await interaction.reply({
-      content: `Screen Recording ${isEnabled ? 'aktiviert' : 'deaktiviert'}!`,
+      content: `Screen Recording ${enabled ? 'aktiviert' : 'deaktiviert'}!`,
       ephemeral: true
     });
   } catch (error: any) {
@@ -153,7 +157,7 @@ export async function handleHighlightCommand(interaction: ChatInputCommandIntera
   const description = interaction.options.getString('beschreibung', true);
 
   try {
-    const highlight = await addHighlight(member.voice.channel.id, description, member.id);
+    const { highlight } = await addHighlight(member.voice.channel.id, description, member.id);
     await interaction.reply({
       content: `Highlight gesetzt: "${description}" bei ${formatTimestamp(highlight.timestamp)}`,
       ephemeral: true

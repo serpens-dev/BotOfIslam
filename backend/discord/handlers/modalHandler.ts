@@ -1,5 +1,5 @@
 import { ModalSubmitInteraction, GuildMember, VoiceChannel } from 'discord.js';
-import { addHighlight } from '../../voice/recording';
+import { addHighlight } from '../clients/voice';
 import log from "encore.dev/log";
 
 export async function handleModal(interaction: ModalSubmitInteraction) {
@@ -17,7 +17,7 @@ export async function handleModal(interaction: ModalSubmitInteraction) {
 
     try {
       const description = interaction.fields.getTextInputValue('description');
-      const highlight = await addHighlight(member.voice.channel.id, description, member.id);
+      const { highlight } = await addHighlight(member.voice.channel.id, description, member.id);
 
       await interaction.reply({
         content: `Highlight gesetzt: "${description}" bei ${formatTimestamp(highlight.timestamp)}`,
