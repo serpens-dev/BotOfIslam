@@ -16,6 +16,7 @@ import { mkdir } from 'fs/promises';
 import log from "encore.dev/log";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { getStorage } from './storage';
 
 // ES Module __dirname Workaround
 const __filename = fileURLToPath(import.meta.url);
@@ -56,8 +57,27 @@ export async function startAudioRecording(connection: VoiceConnection, recording
           fileStream.write(chunk);
         });
 
-        nodeStream.on('end', () => {
+        nodeStream.on('end', async () => {
           fileStream.end();
+          
+          try {
+            // Upload to Mega after recording is complete
+            const storage = getStorage();
+            const cloudPath = `audio/${fileName}`;
+            const link = await storage.uploadFile(filePath, cloudPath);
+            
+            log.info('Aufnahme erfolgreich hochgeladen:', {
+              userId,
+              fileName,
+              cloudLink: link
+            });
+          } catch (uploadError) {
+            log.error('Fehler beim Hochladen der Aufnahme:', {
+              error: uploadError,
+              userId,
+              fileName
+            });
+          }
         });
 
         // Handle errors
