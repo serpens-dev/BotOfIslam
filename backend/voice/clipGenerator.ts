@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import log from "encore.dev/log";
-import { getStorage } from '../storage/megaStorage';
+import { getStorage } from './storage';
 
 interface ClipOptions {
   startTime: Date;

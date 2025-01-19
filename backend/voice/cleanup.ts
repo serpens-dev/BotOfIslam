@@ -1,6 +1,6 @@
 import { CronJob } from "encore.dev/cron";
-import { VoiceDB } from "./service";
-import { getStorage } from "../storage/megaStorage";
+import { VoiceDB } from "./encore.service";
+import { getStorage } from "./storage";
 import log from "encore.dev/log";
 
 interface RecordingToDelete {

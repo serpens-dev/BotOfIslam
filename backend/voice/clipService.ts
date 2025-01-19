@@ -1,6 +1,6 @@
 import { VoiceDB } from './encore.service';
 import { createClip } from './clipGenerator';
-import { getStorage } from '../storage/megaStorage';
+import { getStorage } from './storage';
 import log from "encore.dev/log";
 
 interface ClipRequest {

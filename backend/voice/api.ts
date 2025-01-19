@@ -125,7 +125,13 @@ export const toggleScreen = api<ToggleScreenParams>(
 // Füge einen Highlight hinzu
 export const addHighlight = api<AddHighlightParams>(
   { method: "POST", path: "/recordings/:channelId/highlights" },
-  async ({ channelId, description, userId }): Promise<{ highlight: Recording['highlights'][0] }> => {
+  async ({ channelId, description, userId }): Promise<{ highlight: { 
+    id: number;
+    timestamp: Date;
+    description: string;
+    createdBy: string;
+    clipLink?: string;
+  } }> => {
     const highlight = await addHighlightImpl(channelId, description, userId);
     return {
       highlight: {
