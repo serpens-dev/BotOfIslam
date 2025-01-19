@@ -14,11 +14,17 @@ import { Readable } from 'stream';
 import { VoiceChannel, GuildMember } from 'discord.js';
 import { mkdir } from 'fs/promises';
 import log from "encore.dev/log";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// ES Module __dirname Workaround
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export async function startAudioRecording(connection: VoiceConnection, recordingId: string) {
   try {
     // Create recordings directory
-    const recordingDir = join(__dirname, '..', 'recordings', recordingId);
+    const recordingDir = join(process.cwd(), 'recordings', recordingId);
     await mkdir(recordingDir, { recursive: true });
 
     // Create audio player
