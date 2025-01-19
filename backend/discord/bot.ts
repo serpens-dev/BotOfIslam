@@ -23,13 +23,13 @@ client.once(Events.ClientReady, async () => {
 
   try {
     // Registriere Commands
-    if (client.application) {
-      const commandData = recordingCommands.map(command => command.toJSON());
-      await client.application.commands.set(commandData);
-      log.info('Commands erfolgreich registriert!');
-    } else {
-      log.error('Client application ist nicht verfügbar!');
+    if (!client.application) {
+      throw new Error('Client application ist nicht verfügbar!');
     }
+
+    const commandData = recordingCommands;
+    await client.application.commands.set(commandData);
+    log.info('Commands erfolgreich registriert!');
   } catch (error) {
     log.error('Fehler beim Registrieren der Commands:', error);
   }
@@ -50,18 +50,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// Initialisiere Storage
-initializeStorage({
-  email: process.env.MEGA_EMAIL!,
-  password: process.env.MEGA_PASSWORD!,
-  uploadFolder: process.env.MEGA_UPLOAD_FOLDER || '/recordings'
-});
-
-// Login
-client.login(DISCORD_BOT_TOKEN);
-
 export async function startBot() {
   try {
+    // Initialisiere Storage
+    initializeStorage({
+      email: process.env.MEGA_EMAIL!,
+      password: process.env.MEGA_PASSWORD!,
+      uploadFolder: process.env.MEGA_UPLOAD_FOLDER || '/recordings'
+    });
+
     // Login to Discord
     await client.login(DISCORD_BOT_TOKEN);
     log.info("Bot started successfully");
@@ -70,5 +67,11 @@ export async function startBot() {
     throw error;
   }
 }
+
+// Starte den Bot
+startBot().catch(error => {
+  log.error('Failed to start bot:', error);
+  process.exit(1);
+});
 
 export { client }; 
