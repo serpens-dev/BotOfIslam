@@ -13,6 +13,7 @@ import { client } from '../bot';
 import { startAudioRecording, stopAudioRecording } from './audioRecorder';
 import { startScreenRecording, stopScreenRecording } from './screenRecorder';
 import { getStorage } from '../storage/megaStorage';
+import { createHighlightClips } from './clipGenerator';
 
 interface RecordingSession {
   channelId: string;
@@ -131,6 +132,16 @@ export async function stopRecording(channelId: string) {
       session.cloudLinks.screen.push(link);
     }
 
+    // Erstelle Highlight Clips falls vorhanden
+    let highlightClips: Array<{ description: string; link: string }> = [];
+    if (session.highlights.length > 0 && session.audioFiles.length > 0) {
+      highlightClips = await createHighlightClips(
+        session.audioFiles[0], // Nutze erste Audio Datei
+        session.highlights,
+        session.startTime
+      );
+    }
+
     // Entferne Aufnahme-Emoji vom Channel Namen
     await channel.setName(channel.name.replace('🔴 ', ''));
     
@@ -151,6 +162,13 @@ export async function stopRecording(channelId: string) {
       });
     }
 
+    if (highlightClips.length > 0) {
+      message += '\n**Highlight Clips:**\n';
+      highlightClips.forEach((clip, i) => {
+        message += `${i + 1}. ${clip.description}: ${clip.link}\n`;
+      });
+    }
+
     await channel.send(message);
 
     // Cleanup
@@ -161,7 +179,8 @@ export async function stopRecording(channelId: string) {
       duration: new Date().getTime() - session.startTime.getTime(),
       audioFiles: session.audioFiles,
       screenFiles: session.screenFiles,
-      cloudLinks: session.cloudLinks
+      cloudLinks: session.cloudLinks,
+      highlightClips
     });
 
     return session;
