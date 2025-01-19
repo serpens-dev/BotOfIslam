@@ -1,5 +1,5 @@
 import { CronJob } from "encore.dev/cron";
-import { VoiceDB } from "./encore.service";
+import { VoiceDB } from "./service";
 import { getStorage } from "../storage/megaStorage";
 import log from "encore.dev/log";
 

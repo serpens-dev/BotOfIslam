@@ -14,7 +14,7 @@ import { startAudioRecording, stopAudioRecording } from './audioRecorder';
 import { startScreenRecording, stopScreenRecording } from './screenRecorder';
 import { getStorage } from '../storage/megaStorage';
 import { createHighlightClips } from './clipGenerator';
-import { VoiceDB } from './encore.service';
+import { VoiceDB } from './service';
 
 interface RecordingSession {
   id: number; // Datenbank ID
