@@ -2,58 +2,48 @@
 
 ## Implementierte Features
 
-### Fitna System
-- ✅ Fitna Punkte vergeben
-- ✅ Leaderboard System (Monatlich & Gesamt)
-- ✅ Vertrauenswürdig-Rolle Überprüfung
-- ✅ Mute System mit verschiedenen Mute-Arten:
-  - Text Only
-  - Emoji Only
-  - GIF Only
-  - Slow Mode
-  - Voice Only
-- ✅ Automatische Mute-Dauer basierend auf Punkten
-- ✅ Benutzerdefinierte Mute-Präferenzen
+### Fitna System ✅
+- Fitna Punkte System für Benutzer-Tracking
+- Leaderboard System mit Top 10 Anzeige
+- Rollen-Verifizierung für Moderatoren
+- Mute System basierend auf Fitna Punkten
+- Benutzerdefinierte Präferenzen für Punktevergabe
 
-### Voice Recording System
-- ✅ Basis-Struktur implementiert
-- ✅ Audio Aufnahme pro User
-  - WebM Format mit Opus Codec
-  - Separate Aufnahmen pro Teilnehmer
-- ✅ Screen Recording (optional)
-  - Browser-basierte Aufnahme
-  - WebM Format mit VP8 Video
-- ✅ Highlight System
-  - Timestamps mit Beschreibungen
-  - Automatische Clip-Erstellung
-  - Manuelle Clip-Erstellung
-- ✅ Benutzerinterface
-  - Slash Commands für Start/Stop
-  - Buttons für Screen Recording und Highlights
-  - Modal für Highlight-Beschreibungen
-- ✅ Automatische Bestätigung
-  - 15-Minuten Timer
-  - Automatischer Stop ohne Bestätigung
-- ✅ Cloud Storage Integration
-  - Mega.nz Anbindung
-  - Automatisches Upload
-  - Automatische Löschung nach 7 Tagen
-- ✅ Datenbank Integration
-  - PostgreSQL für Metadaten
-  - Aufnahmen, Teilnehmer und Highlights
-  - REST API für Frontend
+### Voice Recording System 🔄
+- Audio Aufnahme pro User im WebM Format mit Opus Codec
+- Automatisches Speichern der Aufnahmen
+- Optionales Screen Recording im WebM Format (VP8 Video + Opus Audio)
+- Highlight System mit Timestamps und Beschreibungen
+- Benutzeroberfläche:
+  - Slash Commands für Aufnahmesteuerung (/record, /stoprecord)
+  - Screen Recording Toggle (/screen)
+  - Highlight Marker (/highlight)
+  - Automatischer 15-Minuten Bestätigungstimer
+- Kanal-Status Indikator (🎙️ während Aufnahme)
+- Fehlerbehandlung und Benutzer-Feedback
+- Microservice Architektur:
+  - Discord Service für Bot-Interaktionen
+  - Voice Service für Aufnahme-Logik
+  - API-basierte Kommunikation zwischen Services
 
-## In Arbeit
-- 🔄 Frontend für Aufnahmen-Verwaltung
-- 🔄 Automatische Transkription
-- 🔄 Highlight-Compilation Erstellung
+## In Arbeit 🚧
+- Cloud Storage Integration (Mega.nz)
+  - Automatisches Upload der Aufnahmen
+  - Sichere Speicherung mit Verschlüsselung
+  - Link-Generierung für Zugriff
+- Highlight Clip Erstellung
+  - Automatische Extraktion der markierten Zeitpunkte
+  - Zusammenführung von Audio/Video
+  - Export als kompakte Clips
 
-## Geplante Features
-- ⏳ Berechtigungssystem für Aufnahmen
-- ⏳ Analytics Dashboard
-- ⏳ Automatische Kategorisierung
-- ⏳ Suchfunktion für Aufnahmen
-- ⏳ Export-Funktionen
+## Geplant 📋
+- Frontend für Aufnahme-Verwaltung
+  - Übersicht aller Aufnahmen
+  - Highlight Browser
+  - Clip Editor
+- Automatische Löschung nach einer Woche
+- Transkription der Aufnahmen
+- Integration mit anderen Cloud-Diensten
 
 ## Technische Verbesserungen
 - ⏳ Unit Tests
@@ -63,6 +53,7 @@
 - ⏳ CI/CD Pipeline
 
 ## Legende
-- ✅ Implementiert
-- 🔄 In Arbeit
-- ⏳ Geplant
+✅ - Implementiert und getestet
+🔄 - Implementiert, wird noch getestet
+🚧 - In Entwicklung
+📋 - Geplant
