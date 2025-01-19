@@ -55,34 +55,95 @@ class MegaStorageClient {
     }
   }
 
+  private async retryOperation<T>(operation: () => Promise<T>, maxRetries = 5, delay = 2000): Promise<T> {
+    let lastError;
+    
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        log.warn(`Operation fehlgeschlagen, Versuch ${i + 1}/${maxRetries}`, { error });
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1))); // Exponentielles Backoff
+      }
+    }
+    
+    throw lastError;
+  }
+
   async uploadFile(localPath: string, remoteName: string): Promise<string> {
     if (!this.initialized) {
       await this.initialize();
     }
 
     try {
-      // Prüfe ob Datei existiert
+      // Prüfe ob Datei existiert und warte auf Fertigstellung
       await fsPromises.access(localPath);
+      
+      // Warte länger um sicherzustellen, dass die Datei vollständig geschrieben wurde
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
-      // Erstelle Upload Pfad
-      const uploadPath = join(this.uploadFolder, remoteName);
+      // Erstelle Upload Pfad (immer mit Forward Slashes)
+      const uploadPath = join(this.uploadFolder, remoteName).split(/[\\/]/).join('/').replace(/^\//, '');
+      
+      // Prüfe Dateigröße
+      const stats = await fsPromises.stat(localPath);
+      if (stats.size === 0) {
+        throw new Error('Datei ist leer');
+      }
+      
+      log.info('Starte Upload:', {
+        localPath,
+        remotePath: uploadPath,
+        fileSize: stats.size
+      });
 
-      // Upload Datei
-      const file = await this.storage.upload(localPath, uploadPath).complete;
+      // Upload mit Retry-Logik
+      const file = await this.retryOperation(async () => {
+        // Lese die gesamte Datei in den Speicher
+        const fileContent = await fsPromises.readFile(localPath);
+        
+        // Upload Datei
+        const uploadResult = await this.storage.upload(localPath, uploadPath).complete;
+        
+        if (!uploadResult) {
+          throw new Error('Upload fehlgeschlagen - keine Datei zurückgegeben');
+        }
+        
+        return uploadResult;
+      }, 5, 3000);
 
-      // Erstelle Download Link
-      const link = await file.link({ noKey: false });
+      // Prüfe ob die hochgeladene Datei die richtige Größe hat
+      if (file.size !== stats.size) {
+        throw new Error(`Upload fehlgeschlagen - Größenmismatch: ${file.size} != ${stats.size}`);
+      }
+
+      // Erstelle Download Link mit Retry-Logik
+      const link = await this.retryOperation(async () => {
+        const linkResult = await file.link({ noKey: false });
+        if (!linkResult) {
+          throw new Error('Konnte keinen Download-Link erstellen');
+        }
+        return linkResult;
+      }, 3, 2000);
 
       log.info('Datei erfolgreich hochgeladen:', {
         localPath,
         remotePath: uploadPath,
-        link
+        link,
+        fileSize: stats.size,
+        uploadedSize: file.size
       });
 
       return link;
     } catch (error) {
+      // Detaillierte Fehlerprotokollierung
       log.error('Fehler beim Hochladen der Datei:', {
-        error,
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        } : error,
         localPath,
         remoteName
       });

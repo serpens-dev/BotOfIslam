@@ -3,11 +3,21 @@ import {
   EndBehaviorType
 } from '@discordjs/voice';
 import { join } from 'path';
-import { createWriteStream, WriteStream } from 'fs';
-import { Readable } from 'stream';
+import { createWriteStream } from 'fs';
+import { Readable, PassThrough } from 'stream';
 import { mkdir } from 'fs/promises';
 import log from "encore.dev/log";
 import { finished } from 'stream/promises';
+import { spawn } from 'child_process';
+import prism from 'prism-media';
+
+// FFmpeg Pfad
+const FFMPEG_PATH = 'C:\\ffmpeg\\bin\\ffmpeg.exe';
+
+// Audio Konfiguration
+const OPUS_SAMPLE_RATE = 48000;
+const OPUS_CHANNELS = 2;
+const OPUS_FRAME_SIZE = 960;
 
 interface AudioRecording {
   audioFiles: string[];
@@ -18,7 +28,9 @@ const activeRecordings = new Map<string, {
   connection: VoiceConnection;
   userStreams: Map<string, {
     stream: Readable;
-    fileStream: WriteStream;
+    transcoder: prism.opus.Decoder;
+    buffer: PassThrough;
+    ffmpeg: any;
     filePath: string;
   }>;
 }>();
@@ -53,7 +65,9 @@ export async function startAudioRecording(connection: VoiceConnection, recording
         if (!recording) return;
 
         // Wenn der Benutzer bereits aufgenommen wird, ignorieren
-        if (recording.userStreams.has(userId)) return;
+        if (recording.userStreams.has(userId)) {
+          return;
+        }
 
         log.info("Benutzer beginnt zu sprechen", { userId });
         
@@ -63,38 +77,100 @@ export async function startAudioRecording(connection: VoiceConnection, recording
           }
         });
 
-        const fileName = `${recordingId}_${userId}.opus`;
+        // Speichere als MP3
+        const fileName = `${recordingId}_${userId}.mp3`;
         const filePath = join(recordingsPath, fileName);
-        const fileStream = createWriteStream(filePath);
 
-        // Convert AudioReceiveStream to Node.js Readable
-        const nodeStream = Readable.from(audioStream as unknown as AsyncIterable<any>);
-        
-        // Fehlerbehandlung für Streams
-        nodeStream.on('error', (error) => {
-          log.error("Fehler im Audio-Stream", { userId, error });
-          if (!fileStream.destroyed) {
-            fileStream.end();
+        // Erstelle Opus Transcoder
+        const transcoder = new prism.opus.Decoder({
+          rate: OPUS_SAMPLE_RATE,
+          channels: OPUS_CHANNELS,
+          frameSize: OPUS_FRAME_SIZE
+        });
+
+        // Erstelle Puffer für Audio-Daten
+        const buffer = new PassThrough();
+
+        // FFmpeg Prozess für Konvertierung zu MP3
+        const ffmpeg = spawn(FFMPEG_PATH, [
+          '-f', 's16le',           // Raw PCM 16-bit Little Endian
+          '-ar', '48000',          // Sample rate
+          '-ac', '2',              // Stereo
+          '-i', 'pipe:0',          // Input from pipe
+          '-c:a', 'libmp3lame',    // MP3 codec
+          '-b:a', '320k',          // Konstante Bitrate
+          '-bufsize', '960k',      // Größerer Buffer (3x Bitrate)
+          '-minrate', '320k',      // Minimale Bitrate erzwingen
+          '-maxrate', '320k',      // Maximale Bitrate erzwingen
+          '-reservoir', '0',       // Kein VBR-Reservoir
+          '-application', 'audio', // Optimiert für Audio
+          '-shortest',            // Beende wenn Input endet
+          filePath                // Output file
+        ]);
+
+        // Debug-Logging für FFmpeg
+        ffmpeg.stderr.on('data', (data) => {
+          const output = data.toString();
+          if (output.includes('Error') || output.includes('error')) {
+            log.error("FFmpeg Fehler Output:", { output });
+          } else {
+            log.debug("FFmpeg Debug Output:", { output });
           }
         });
 
-        fileStream.on('error', (error) => {
-          log.error("Fehler beim Schreiben der Datei", { userId, error });
-          nodeStream.destroy();
+        // Verbesserte Fehlerbehandlung
+        ffmpeg.on('error', (error) => {
+          log.error("FFmpeg Prozess-Fehler:", { 
+            error: error.message, 
+            command: FFMPEG_PATH, 
+            args: ffmpeg.spawnargs 
+          });
+          try {
+            audioStream.destroy();
+            transcoder.destroy();
+            buffer.destroy();
+            ffmpeg.kill();
+          } catch (e) {
+            log.error("Fehler beim Aufräumen nach FFmpeg-Fehler:", e);
+          }
+        });
+
+        // Pipe Audio durch Transcoder zum Puffer
+        audioStream
+          .pipe(transcoder)
+          .pipe(buffer);
+
+        // Pipe vom Puffer zu FFmpeg
+        buffer.pipe(ffmpeg.stdin);
+
+        // Fehlerbehandlung für Streams
+        buffer.on('error', (error: NodeJS.ErrnoException) => {
+          log.error("Stream Fehler:", { error: error.message });
+          try {
+            audioStream.destroy();
+            transcoder.destroy();
+            buffer.destroy();
+            ffmpeg.kill();
+          } catch (e) {
+            log.error("Fehler beim Aufräumen nach Stream-Fehler:", e);
+          }
         });
 
         recording.userStreams.set(userId, {
-          stream: nodeStream,
-          fileStream,
+          stream: audioStream,
+          transcoder,
+          buffer,
+          ffmpeg,
           filePath
         });
 
-        // Pipe stream direkt in die Datei
-        nodeStream.pipe(fileStream);
-        
-        // Warte auf Stream-Ende
-        finished(nodeStream).catch((error) => {
-          log.error("Stream wurde unerwartet beendet", { userId, error });
+        // Erfolgs-Logging
+        ffmpeg.on('exit', (code, signal) => {
+          if (code === 0) {
+            log.info("FFmpeg Konvertierung erfolgreich beendet", { filePath });
+          } else {
+            log.error("FFmpeg Prozess beendet mit Fehler", { code, signal, filePath });
+          }
         });
 
         log.info("Neue Audioaufnahme gestartet", { userId, filePath });
@@ -103,14 +179,10 @@ export async function startAudioRecording(connection: VoiceConnection, recording
       }
     });
 
+    // Wir ignorieren das 'end' Event, da wir kontinuierlich aufnehmen wollen
     connection.receiver.speaking.on('end', (userId) => {
-      const recording = activeRecordings.get(channelId);
-      if (!recording) return;
-
-      const userStream = recording.userStreams.get(userId);
-      if (userStream) {
-        log.info("Benutzer hat aufgehört zu sprechen", { userId });
-      }
+      // Nur Logging
+      log.debug("Benutzer hat aufgehört zu sprechen", { userId });
     });
 
     return true;
@@ -134,18 +206,24 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
     // Beende alle Streams sicher
     for (const [userId, userStream] of recording.userStreams) {
       try {
-        // Beende Stream sicher
-        userStream.stream.unpipe(userStream.fileStream);
+        log.info("Beende Audio-Stream", { userId });
+        
+        // Beende Streams sauber
         userStream.stream.destroy();
+        userStream.transcoder.destroy();
+        userStream.buffer.end();
         
-        // Schließe die Datei
-        userStream.fileStream.end();
+        // Warte auf FFmpeg Beendigung
+        await new Promise((resolve) => {
+          userStream.ffmpeg.on('exit', () => {
+            audioFiles.push(userStream.filePath);
+            resolve(null);
+          });
+        });
         
-        // Warte kurz um Buffer zu leeren
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Zusätzliche Wartezeit für Dateisystem
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        audioFiles.push(userStream.filePath);
-        log.info("Audio-Stream beendet", { userId });
       } catch (error) {
         log.error("Fehler beim Beenden des Streams", { userId, error });
       }

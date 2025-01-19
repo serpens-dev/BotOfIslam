@@ -221,8 +221,10 @@ export async function stopRecording(channelId: string): Promise<Recording> {
       log.info("Starte Upload der Audiodateien...", { count: audioFiles.length });
       for (const file of audioFiles) {
         try {
-          const fileName = file.split('/').pop()!;
-          const link = await storage.uploadFile(file, `audio/${fileName}`);
+          // Extrahiere nur den Dateinamen ohne Pfad
+          const fileName = file.split(/[\\/]/).pop()!;
+          const uploadPath = `audio/${fileName}`;
+          const link = await storage.uploadFile(file, uploadPath);
           uploadedLinks.audio.push(link);
           log.info("Audiodatei hochgeladen", { file: fileName, link });
         } catch (error) {
