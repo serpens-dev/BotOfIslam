@@ -35,8 +35,25 @@ export interface Highlight {
   clipLink?: string;
 }
 
-// Starte eine neue Aufnahme
-export const startRecording = api<{ 
+// Wrapper-Funktionen für einfachere Verwendung
+export async function startRecording(channelId: string, initiatorId: string, participants?: string[]): Promise<{ recording: Recording }> {
+  return await startRecordingApi({ channelId, initiatorId, participants });
+}
+
+export async function stopRecording(channelId: string): Promise<{ recording: Recording }> {
+  return await stopRecordingApi({ channelId });
+}
+
+export async function toggleScreenRecording(channelId: string): Promise<{ enabled: boolean }> {
+  return await toggleScreen({ channelId });
+}
+
+export async function addHighlight(channelId: string, description: string, userId: string): Promise<{ highlight: Highlight }> {
+  return await addHighlightApi({ channelId, description, userId });
+}
+
+// API Endpunkte
+export const startRecordingApi = api<{ 
   channelId: string; 
   initiatorId: string; 
   participants?: string[]; 
@@ -58,8 +75,7 @@ export const startRecording = api<{
   }
 );
 
-// Stoppe eine Aufnahme
-export const stopRecording = api<{ channelId: string }>(
+export const stopRecordingApi = api<{ channelId: string }>(
   { method: "POST", path: "/recordings/:channelId/stop" },
   async ({ channelId }): Promise<{ recording: Recording }> => {
     const session = await stopRecordingImpl(channelId);
@@ -69,7 +85,7 @@ export const stopRecording = api<{ channelId: string }>(
         channelId: session.channelId,
         startedAt: session.startTime,
         endedAt: new Date(),
-        initiatorId: Array.from(session.participants)[0], // Erster Teilnehmer ist der Initiator
+        initiatorId: Array.from(session.participants)[0],
         screenRecording: session.screenRecording,
         participants: Array.from(session.participants).map(userId => ({
           userId,
@@ -88,7 +104,6 @@ export const stopRecording = api<{ channelId: string }>(
   }
 );
 
-// Toggle Screen Recording
 export const toggleScreen = api<{ channelId: string }>(
   { method: "POST", path: "/recordings/:channelId/screen" },
   async ({ channelId }): Promise<{ enabled: boolean }> => {
@@ -97,8 +112,7 @@ export const toggleScreen = api<{ channelId: string }>(
   }
 );
 
-// Füge einen Highlight hinzu
-export const addHighlight = api<{ 
+export const addHighlightApi = api<{ 
   channelId: string; 
   description: string; 
   userId: string; 
@@ -108,7 +122,7 @@ export const addHighlight = api<{
     const highlight = await addHighlightImpl(channelId, description, userId);
     return {
       highlight: {
-        id: 0, // Wird in der Datenbank generiert
+        id: 0,
         timestamp: highlight.timestamp,
         description: highlight.description,
         createdBy: highlight.createdBy,
