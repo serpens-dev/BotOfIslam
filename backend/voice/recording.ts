@@ -127,6 +127,12 @@ export async function stopRecording(channelId: string): Promise<Recording> {
   }
 
   try {
+    // Get voice channel for notifications
+    const channel = await fetchVoiceChannel(channelId);
+    if (!channel) {
+      throw new Error("Voice Channel nicht gefunden");
+    }
+
     // Update recording in database
     await VoiceDB.exec`
       UPDATE recordings 
@@ -137,7 +143,7 @@ export async function stopRecording(channelId: string): Promise<Recording> {
     // Upload files and get links
     const storage = await getStorage();
     
-    // Upload audio files
+    // Upload audio files and send links
     for (const file of recording.audioFiles) {
       const fileName = file.split('/').pop()!;
       const link = await storage.uploadFile(file, `audio/${fileName}`);
@@ -152,6 +158,26 @@ export async function stopRecording(channelId: string): Promise<Recording> {
         recording.cloudLinks.screen.push(link);
       }
     }
+
+    // Format links for Discord message
+    let message = '⏹️ Aufnahme beendet!\n\n';
+    
+    if (recording.cloudLinks.audio.length > 0) {
+      message += '🎙️ **Audio Aufnahmen:**\n';
+      recording.cloudLinks.audio.forEach((link, index) => {
+        message += `${index + 1}. ${link}\n`;
+      });
+    }
+
+    if (recording.cloudLinks.screen.length > 0) {
+      message += '\n🖥️ **Screen Aufnahmen:**\n';
+      recording.cloudLinks.screen.forEach((link, index) => {
+        message += `${index + 1}. ${link}\n`;
+      });
+    }
+
+    // Send links in Discord
+    await channel.send(message);
 
     // Set end time
     recording.endedAt = new Date();
