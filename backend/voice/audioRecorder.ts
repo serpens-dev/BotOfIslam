@@ -14,7 +14,9 @@ import { Readable } from 'stream';
 import { createWriteStream, promises as fsPromises } from 'fs';
 import { join } from 'path';
 import { pipeline } from 'stream/promises';
+import { spawn } from 'child_process';
 import * as prism from 'prism-media';
+import ffmpeg from 'ffmpeg-static';
 import log from "encore.dev/log";
 
 interface AudioRecording {
@@ -61,27 +63,33 @@ export async function startAudioRecording(
         }
       });
 
-      // Konvertiere zu WebM
+      // Konvertiere zu WebM mit FFmpeg
       const opusDecoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-      const webmEncoder = new prism.FFmpeg({
-        args: [
-          '-i', '-',
-          '-c:a', 'libopus',
-          '-f', 'webm',
-          'pipe:1'
-        ]
-      });
+      const ffmpegProcess = spawn(ffmpeg!, [
+        '-i', 'pipe:0',  // Input from stdin
+        '-c:a', 'libopus', // Use Opus codec
+        '-f', 'webm',    // WebM container
+        'pipe:1'         // Output to stdout
+      ]);
 
       // Speichere Stream
       const fileStream = createWriteStream(filename);
-      pipeline(audioStream, opusDecoder, webmEncoder, fileStream)
-        .catch(error => {
-          log.error('Fehler beim Aufnehmen von Audio:', {
-            error,
-            userId: member.id,
-            filename
-          });
-        });
+      
+      // Verkette die Streams
+      audioStream
+        .pipe(opusDecoder)
+        .pipe(ffmpegProcess.stdin);
+      
+      ffmpegProcess.stdout.pipe(fileStream);
+
+      // Fehlerbehandlung
+      ffmpegProcess.stderr.on('data', (data) => {
+        log.debug('FFmpeg Output:', data.toString());
+      });
+
+      ffmpegProcess.on('error', (error) => {
+        log.error('FFmpeg Prozess Fehler:', error);
+      });
 
       recordings.push({
         userId: member.id,
