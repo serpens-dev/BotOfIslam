@@ -1,4 +1,4 @@
-import { File, Storage, createStorage } from 'megajs';
+import { File, Storage as MegaStorage } from 'megajs';
 import { createReadStream, createWriteStream } from 'fs';
 import { promises as fsPromises } from 'fs';
 import { join } from 'path';
@@ -10,8 +10,25 @@ interface StorageConfig {
   uploadFolder: string;
 }
 
-class MegaStorage {
-  private storage: Storage;
+interface MegaFile {
+  name: string;
+  directory: boolean;
+  size: number;
+  timestamp: number;
+  downloadFile(): Promise<Buffer>;
+  link(options?: { noKey?: boolean }): Promise<string>;
+  delete(): Promise<void>;
+}
+
+// Erweitere den Storage-Typ
+interface ExtendedStorage extends MegaStorage {
+  fs: {
+    children: MegaFile[];
+  };
+}
+
+class MegaStorageClient {
+  private storage!: ExtendedStorage;
   private uploadFolder: string;
   private initialized: boolean = false;
 
@@ -23,10 +40,10 @@ class MegaStorage {
     if (this.initialized) return;
 
     try {
-      this.storage = await createStorage({
+      this.storage = new MegaStorage({
         email: this.config.email,
         password: this.config.password
-      });
+      }) as ExtendedStorage;
 
       await this.storage.ready;
       this.initialized = true;
@@ -54,7 +71,7 @@ class MegaStorage {
       const file = await this.storage.upload(localPath, uploadPath).complete;
 
       // Erstelle Download Link
-      const link = await file.link();
+      const link = await file.link({ noKey: false });
 
       log.info('Datei erfolgreich hochgeladen:', {
         localPath,
@@ -79,12 +96,15 @@ class MegaStorage {
     }
 
     try {
-      const file = await this.storage.getFile(remotePath);
-      await file.delete();
-
-      log.info('Datei erfolgreich gelöscht:', {
-        remotePath
-      });
+      const files = await this.storage.fs.children;
+      const file = files.find((f: MegaFile) => f.name === remotePath);
+      
+      if (file) {
+        await file.delete();
+        log.info('Datei erfolgreich gelöscht:', { remotePath });
+      } else {
+        throw new Error(`Datei ${remotePath} nicht gefunden`);
+      }
     } catch (error) {
       log.error('Fehler beim Löschen der Datei:', {
         error,
@@ -100,10 +120,10 @@ class MegaStorage {
     }
 
     try {
-      const files = await this.storage.getFiles();
+      const files = await this.storage.fs.children;
       return files
-        .filter(f => !prefix || f.name.startsWith(prefix))
-        .map(f => f.name);
+        .filter((f: MegaFile) => !prefix || f.name.startsWith(prefix))
+        .map((f: MegaFile) => f.name);
     } catch (error) {
       log.error('Fehler beim Auflisten der Dateien:', error);
       throw error;
@@ -116,14 +136,21 @@ class MegaStorage {
     }
 
     try {
-      const file = await this.storage.getFile(remotePath);
-      const downloadStream = await file.download();
+      const files = await this.storage.fs.children;
+      const file = files.find((f: MegaFile) => f.name === remotePath);
+
+      if (!file) {
+        throw new Error(`Datei ${remotePath} nicht gefunden`);
+      }
+
+      const downloadStream = await file.downloadFile();
       const writeStream = createWriteStream(localPath);
 
       await new Promise((resolve, reject) => {
-        downloadStream.pipe(writeStream)
-          .on('finish', resolve)
-          .on('error', reject);
+        writeStream.write(downloadStream, (error) => {
+          if (error) reject(error);
+          else resolve(undefined);
+        });
       });
 
       log.info('Datei erfolgreich heruntergeladen:', {
@@ -142,17 +169,17 @@ class MegaStorage {
 }
 
 // Singleton Instanz
-let instance: MegaStorage | null = null;
+let instance: MegaStorageClient | null = null;
 
-export async function initializeStorage(config: StorageConfig): Promise<MegaStorage> {
+export async function initializeStorage(config: StorageConfig): Promise<MegaStorageClient> {
   if (!instance) {
-    instance = new MegaStorage(config);
+    instance = new MegaStorageClient(config);
     await instance.initialize();
   }
   return instance;
 }
 
-export function getStorage(): MegaStorage {
+export function getStorage(): MegaStorageClient {
   if (!instance) {
     throw new Error('Storage nicht initialisiert');
   }

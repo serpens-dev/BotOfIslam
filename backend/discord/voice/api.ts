@@ -34,6 +34,10 @@ interface DBRecordingRow {
   highlights: string; // JSON String
 }
 
+interface GetRecordingParams {
+  id: string;
+}
+
 // Liste alle Aufnahmen
 export const listRecordings = api(
   { method: "GET", path: "/recordings" },
@@ -86,7 +90,7 @@ export const listRecordings = api(
 );
 
 // Hole eine einzelne Aufnahme
-export const getRecording = api(
+export const getRecording = api<GetRecordingParams>(
   { method: "GET", path: "/recordings/:id" },
   async ({ id }): Promise<{ recording: Recording }> => {
     const row = await VoiceDB.queryRow<DBRecordingRow>`
@@ -112,7 +116,7 @@ export const getRecording = api(
       FROM recordings r
       LEFT JOIN recording_participants rp ON rp.recording_id = r.id
       LEFT JOIN highlights h ON h.recording_id = r.id
-      WHERE r.id = ${id}
+      WHERE r.id = ${parseInt(id)}
       GROUP BY r.id
     `;
 
