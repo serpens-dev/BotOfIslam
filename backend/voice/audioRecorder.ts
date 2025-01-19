@@ -8,6 +8,7 @@ import { Readable } from 'stream';
 import { mkdir } from 'fs/promises';
 import log from "encore.dev/log";
 import { finished } from 'stream/promises';
+import { spawn } from 'child_process';
 
 interface AudioRecording {
   audioFiles: string[];
@@ -20,6 +21,7 @@ const activeRecordings = new Map<string, {
     stream: Readable;
     fileStream: WriteStream;
     filePath: string;
+    ffmpeg: any;
   }>;
 }>();
 
@@ -63,9 +65,19 @@ export async function startAudioRecording(connection: VoiceConnection, recording
           }
         });
 
-        const fileName = `${recordingId}_${userId}.webm`;
+        const fileName = `${recordingId}_${userId}.mp3`;
         const filePath = join(recordingsPath, fileName);
-        const fileStream = createWriteStream(filePath);
+
+        // FFmpeg Prozess für MP3-Konvertierung
+        const ffmpeg = spawn('ffmpeg', [
+          '-i', 'pipe:0',          // Input von pipe
+          '-acodec', 'libmp3lame', // MP3 Codec
+          '-ab', '128k',           // Bitrate
+          '-ac', '2',              // Stereo
+          '-ar', '48000',          // Sample rate
+          '-f', 'mp3',             // Format
+          filePath                 // Output file
+        ]);
 
         // Convert AudioReceiveStream to Node.js Readable
         const nodeStream = Readable.from(audioStream as unknown as AsyncIterable<any>);
@@ -73,24 +85,34 @@ export async function startAudioRecording(connection: VoiceConnection, recording
         // Fehlerbehandlung für Streams
         nodeStream.on('error', (error) => {
           log.error("Fehler im Audio-Stream", { userId, error });
-          if (!fileStream.destroyed) {
-            fileStream.end();
-          }
+          ffmpeg.kill();
         });
 
-        fileStream.on('error', (error) => {
-          log.error("Fehler beim Schreiben der Datei", { userId, error });
-          nodeStream.destroy();
+        ffmpeg.stderr.on('data', (data) => {
+          log.debug("FFmpeg Output:", data.toString());
+        });
+
+        ffmpeg.on('error', (error) => {
+          log.error("FFmpeg Fehler:", error);
+        });
+
+        ffmpeg.on('exit', (code, signal) => {
+          if (code === 0) {
+            log.info("FFmpeg Konvertierung erfolgreich beendet");
+          } else {
+            log.error("FFmpeg Prozess fehlgeschlagen", { code, signal });
+          }
         });
 
         recording.userStreams.set(userId, {
           stream: nodeStream,
-          fileStream,
-          filePath
+          fileStream: ffmpeg.stdin as unknown as WriteStream,
+          filePath,
+          ffmpeg
         });
 
-        // Pipe stream to file mit Fehlerbehandlung
-        nodeStream.pipe(fileStream);
+        // Pipe stream to FFmpeg
+        nodeStream.pipe(ffmpeg.stdin);
         
         // Warte auf Stream-Ende
         finished(nodeStream).catch((error) => {
@@ -138,11 +160,16 @@ export async function stopAudioRecording(channelId: string): Promise<AudioRecord
         userStream.stream.unpipe(userStream.fileStream);
         userStream.stream.destroy();
         
-        // Warte kurz um Buffer zu leeren
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Schließe Datei
+        // Beende FFmpeg sauber
         userStream.fileStream.end();
+        
+        // Warte auf FFmpeg Beendigung
+        await new Promise<void>((resolve) => {
+          userStream.ffmpeg.on('exit', () => {
+            resolve();
+          });
+        });
+        
         audioFiles.push(userStream.filePath);
         log.info("Audio-Stream beendet", { userId });
       } catch (error) {
