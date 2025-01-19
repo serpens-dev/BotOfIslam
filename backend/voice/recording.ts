@@ -131,7 +131,7 @@ export async function stopRecording(channelId: string): Promise<Recording> {
     await VoiceDB.exec`
       UPDATE recordings 
       SET ended_at = NOW()
-      WHERE id = ${recording.id}  // number wird automatisch konvertiert
+      WHERE id = ${recording.id}
     `;
 
     // Upload files and get links
