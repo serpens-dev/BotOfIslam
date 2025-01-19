@@ -130,8 +130,13 @@ export async function stopAudioRecording(channelId: string) {
     }
 
     // Stoppe die Aufnahme
-    if (recording.stream) {
-      recording.stream.destroy();
+    if (recording.connection) {
+      // Entferne alle Listener
+      recording.connection.receiver.speaking.removeAllListeners();
+      
+      // Trenne die Verbindung
+      recording.connection.destroy();
+      log.info("Voice-Verbindung getrennt");
     }
     
     // Entferne die Aufnahme aus der Map
