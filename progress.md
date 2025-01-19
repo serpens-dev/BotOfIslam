@@ -3,57 +3,59 @@
 ## Implementierte Features
 
 ### Fitna System ✅
-- Fitna Punkte System für Benutzer-Tracking
+- Fitna Punkte System für User Tracking
 - Leaderboard System mit Top 10 Anzeige
 - Rollen-Verifizierung für Moderatoren
 - Mute System basierend auf Fitna Punkten
-- Benutzerdefinierte Präferenzen für Punktevergabe
+  - Text Mute
+  - Emoji Mute
+  - GIF Mute
+  - Slow Mode
+  - Voice Mute
+- Custom Mute Präferenzen
+- Automatische Mute Dauer basierend auf Punkten
 
-### Voice Recording System 🔄
-- Audio Aufnahme pro User im WebM Format mit Opus Codec
-- Automatisches Speichern der Aufnahmen
-- Optionales Screen Recording im WebM Format (VP8 Video + Opus Audio)
-- Highlight System mit Timestamps und Beschreibungen
-- Benutzeroberfläche:
-  - Slash Commands für Aufnahmesteuerung (/record, /stoprecord)
-  - Screen Recording Toggle (/screen)
-  - Highlight Marker (/highlight)
-  - Automatischer 15-Minuten Bestätigungstimer
-- Kanal-Status Indikator (🎙️ während Aufnahme)
-- Fehlerbehandlung und Benutzer-Feedback
-- Microservice Architektur:
-  - Discord Service für Bot-Interaktionen
-  - Voice Service für Aufnahme-Logik
-  - API-basierte Kommunikation zwischen Services
+### Voice Recording System ✅
+- Grundstruktur implementiert
+  - Audio Aufnahme pro User in WebM Format mit Opus Codec
+  - Screen Recording optional in WebM Format mit VP8 Video und Opus Audio
+  - Highlight System mit Timestamps und Beschreibungen
+  - Vorbereitung für Clip Erstellung
+- User Interface
+  - Slash Commands für Start/Stop
+  - Buttons für Screen Recording und Highlights
+  - Automatische Bestätigung nach 15 Minuten
+- Cloud Storage Integration
+  - Mega.nz für Datenspeicherung
+  - Automatisches Upload nach Aufnahmeende
+  - Separate Links für Audio und Screen Recordings
+- Datenbank Integration
+  - PostgreSQL für Metadaten
+  - Tracking von Aufnahmen, Teilnehmern und Highlights
+  - API Endpunkte für Frontend Zugriff
 
-## In Arbeit 🚧
-- Cloud Storage Integration (Mega.nz)
-  - Automatisches Upload der Aufnahmen
-  - Sichere Speicherung mit Verschlüsselung
-  - Link-Generierung für Zugriff
-- Highlight Clip Erstellung
-  - Automatische Extraktion der markierten Zeitpunkte
-  - Zusammenführung von Audio/Video
-  - Export als kompakte Clips
-
-## Geplant 📋
-- Frontend für Aufnahme-Verwaltung
-  - Übersicht aller Aufnahmen
-  - Highlight Browser
+## In Arbeit 🔄
+- Frontend für Recording Management
+  - Aufnahmen Browser
+  - Highlight Verwaltung
   - Clip Editor
-- Automatische Löschung nach einer Woche
-- Transkription der Aufnahmen
-- Integration mit anderen Cloud-Diensten
+- Automatische Transkription
+- Highlight Compilation
 
-## Technische Verbesserungen
-- ⏳ Unit Tests
-- ⏳ Error Handling Verbesserungen
-- ⏳ Performance Optimierungen
-- ⏳ Dokumentation
-- ⏳ CI/CD Pipeline
+## Geplante Features 📋
+- Permission System für Aufnahmen
+- Analytics Dashboard
+- Automatische Kategorisierung
+- Such-Funktion
+- Export Features
+
+## Technische Verbesserungen 🛠
+- Microservice Architektur mit Encore
+- Typsichere API Endpunkte
+- Verbesserte Fehlerbehandlung
+- Cloud-native Deployment
 
 ## Legende
-✅ - Implementiert und getestet
-🔄 - Implementiert, wird noch getestet
-🚧 - In Entwicklung
-📋 - Geplant
+✅ Implementiert
+🔄 In Arbeit
+📋 Geplant

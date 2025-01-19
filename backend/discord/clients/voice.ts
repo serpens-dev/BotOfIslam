@@ -16,7 +16,20 @@ export async function toggleScreenRecording(channelId: string): Promise<{ enable
   return voice.recordingToggleScreen({ channelId });
 }
 
-// Füge einen Highlight hinzu
+// Add a highlight
 export async function addHighlight(channelId: string, description: string, userId: string): Promise<{ highlight: Highlight }> {
-  return voice.recordingAddHighlight({ channelId, description, userId });
-} 
+  // Hole zuerst die aktive Aufnahme für den Channel
+  const { recordings } = await voice.listRecordings();
+  const activeRecording = recordings.find(r => r.channelId === channelId && !r.endedAt);
+  
+  if (!activeRecording) {
+    throw new Error("Keine aktive Aufnahme in diesem Channel");
+  }
+
+  return voice.recordingAddHighlight({ 
+    recordingId: activeRecording.id,
+    timestamp: new Date(),
+    description,
+    userId
+  });
+}
