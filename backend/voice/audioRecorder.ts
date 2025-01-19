@@ -33,13 +33,19 @@ export async function startAudioRecording(connection: VoiceConnection, recording
     const receiver = connection.receiver;
     const recordingsPath = join(process.cwd(), 'recordings', recordingId);
     
+    // Prüfe ob channelId existiert
+    const channelId = connection.joinConfig.channelId;
+    if (!channelId) {
+      throw new Error("Keine Channel ID in der Voice Connection gefunden");
+    }
+    
     // Speichere die aktive Aufnahme
-    activeRecordings.set(connection.joinConfig.channelId, {
+    activeRecordings.set(channelId, {
       connection,
       stream: receiver
     });
 
-    log.info("Audio-Aufnahme gestartet", { channelId: connection.joinConfig.channelId });
+    log.info("Audio-Aufnahme gestartet", { channelId });
 
     // Create recordings directory
     await mkdir(recordingsPath, { recursive: true });
