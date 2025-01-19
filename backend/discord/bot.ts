@@ -52,11 +52,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 export async function startBot() {
   try {
-    // Initialisiere Storage
-    initializeStorage({
+    // Initialize storage
+    await initializeStorage({
       email: process.env.MEGA_EMAIL!,
       password: process.env.MEGA_PASSWORD!,
-      uploadFolder: process.env.MEGA_UPLOAD_FOLDER || '/recordings'
+      uploadFolder: process.env.DRIVE_UPLOAD_FOLDER || '/recordings'
     });
 
     // Login to Discord

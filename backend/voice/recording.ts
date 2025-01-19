@@ -21,7 +21,6 @@ import { pipeline } from 'stream/promises';
 import log from "encore.dev/log";
 import { client } from '../discord/bot';
 import { startAudioRecording, stopAudioRecording } from './audioRecorder';
-import { startScreenRecording, stopScreenRecording } from './screenRecorder';
 import { getStorage } from './storage';
 import { createHighlightClips } from './clipGenerator';
 import { VoiceDB } from './encore.service';
