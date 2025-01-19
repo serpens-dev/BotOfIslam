@@ -29,18 +29,18 @@ export interface Highlight {
   clipLink?: string;
 }
 
-export async function startRecording(channelId: string, initiatorId: string, participants?: string[]) {
-  return voice.startRecording({ channelId, initiatorId, participants });
+export async function startRecording(channelId: string, initiatorId: string, participants?: string[]): Promise<{ recording: Recording }> {
+  return await voice.startRecording({ channelId, initiatorId, participants });
 }
 
-export async function stopRecording(channelId: string) {
-  return voice.stopRecording({ channelId });
+export async function stopRecording(channelId: string): Promise<{ recording: Recording }> {
+  return await voice.stopRecording({ channelId });
 }
 
-export async function toggleScreenRecording(channelId: string) {
-  return voice.toggleScreen({ channelId });
+export async function toggleScreenRecording(channelId: string): Promise<{ enabled: boolean }> {
+  return await voice.toggleScreen({ channelId });
 }
 
-export async function addHighlight(channelId: string, description: string, userId: string) {
-  return voice.addHighlight({ channelId, description, userId });
+export async function addHighlight(channelId: string, description: string, userId: string): Promise<{ highlight: Highlight }> {
+  return await voice.addHighlight({ channelId, description, userId });
 } 
