@@ -34,7 +34,7 @@ interface GetRecordingParams {
 }
 
 // Starte eine neue Aufnahme
-export const startRecording = api<StartRecordingParams>(
+export const recordingStart = api<StartRecordingParams>(
   { method: "POST", path: "/recordings/start" },
   async ({ channelId, initiatorId, participants }): Promise<{ recording: Recording }> => {
     const session = await startRecordingImpl(channelId, initiatorId);
@@ -65,7 +65,7 @@ export const startRecording = api<StartRecordingParams>(
 );
 
 // Stoppe eine Aufnahme
-export const stopRecording = api<StopRecordingParams>(
+export const recordingStop = api<StopRecordingParams>(
   { method: "POST", path: "/recordings/:channelId/stop" },
   async ({ channelId }): Promise<{ recording: Recording }> => {
     const session = await stopRecordingImpl(channelId);
@@ -102,7 +102,7 @@ export const stopRecording = api<StopRecordingParams>(
 );
 
 // Toggle Screen Recording
-export const toggleScreen = api<ToggleScreenParams>(
+export const recordingToggleScreen = api<ToggleScreenParams>(
   { method: "POST", path: "/recordings/:channelId/screen" },
   async ({ channelId }): Promise<{ enabled: boolean }> => {
     const enabled = await toggleScreenRecordingImpl(channelId);
@@ -111,7 +111,7 @@ export const toggleScreen = api<ToggleScreenParams>(
 );
 
 // Füge einen Highlight hinzu
-export const addHighlight = api<AddHighlightParams>(
+export const recordingAddHighlight = api<AddHighlightParams>(
   { method: "POST", path: "/recordings/:channelId/highlights" },
   async ({ channelId, description, userId }): Promise<{ highlight: { 
     id: number;
