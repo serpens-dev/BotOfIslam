@@ -1,5 +1,5 @@
 export interface Recording {
-  id: string;
+  id: number;
   channelId: string;
   startedAt: Date;
   endedAt?: Date;
@@ -22,17 +22,16 @@ export interface Recording {
 }
 
 export interface Highlight {
-  id: string;
-  recordingId: string;
+  id: number;
+  recordingId: number;
   timestamp: Date;
   description: string;
   userId: string;
-  createdBy: string;
   clipPath?: string;
 }
 
 export interface DBRecording {
-  id: string;
+  id: number;
   channel_id: string;
   started_at: Date;
   ended_at?: Date;
@@ -41,17 +40,18 @@ export interface DBRecording {
 }
 
 export interface DBParticipant {
-  recording_id: string;
+  id: number;
+  recording_id: number;
   user_id: string;
-  cloud_audio_link?: string;
-  cloud_screen_link?: string;
+  audio_link?: string;
+  screen_link?: string;
 }
 
 export interface DBHighlight {
-  id: string;
-  recording_id: string;
+  id: number;
+  recording_id: number;
   timestamp: Date;
   description: string;
   user_id: string;
-  cloud_clip_link?: string;
+  clip_path?: string;
 } 

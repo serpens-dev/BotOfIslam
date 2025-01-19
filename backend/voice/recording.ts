@@ -18,7 +18,7 @@ import { VoiceDB } from './encore.service';
 import { Recording, Highlight } from "./types";
 
 interface RecordingSession {
-  id: string;                    // Datenbank ID
+  id: number;                    // Datenbank ID als number
   channelId: string;
   startTime: Date;
   initiatorId: string;
@@ -52,7 +52,7 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
 
     // Initialize recording session
     const recording: Recording = {
-      id: result.id.toString(),
+      id: result.id,  // Direkt die number verwenden
       channelId,
       initiatorId,
       startedAt: new Date(),
@@ -90,7 +90,7 @@ export async function stopRecording(channelId: string): Promise<Recording> {
     await VoiceDB.exec`
       UPDATE recordings 
       SET ended_at = NOW()
-      WHERE id = ${recording.id}
+      WHERE id = ${recording.id}  // number wird automatisch konvertiert
     `;
 
     // Upload files and get links
@@ -154,12 +154,12 @@ export async function addHighlight(channelId: string, description: string, userI
     }
 
     const createdHighlight: Highlight = {
-      id: result.id.toString(),
-      recordingId: recording.id,
+      id: result.id,  // Direkt die number verwenden
+      recordingId: recording.id,  // Direkt die number verwenden
       timestamp: new Date(),
       description,
       userId,
-      createdBy: userId
+      clipPath: undefined
     };
 
     return createdHighlight;

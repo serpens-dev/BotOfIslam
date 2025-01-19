@@ -7,12 +7,12 @@ import {
   addHighlight as addHighlightImpl
 } from "./recording";
 import { Recording, Highlight, DBRecording, DBParticipant, DBHighlight } from "./types";
+import { getVoiceChannel } from "./utils";
 
 // API Typen
 interface StartRecordingParams {
   channelId: string;
   initiatorId: string;
-  participants?: string[];
 }
 
 interface StopRecordingParams {
@@ -24,112 +24,167 @@ interface ToggleScreenParams {
 }
 
 interface AddHighlightParams {
-  channelId: string;
+  recordingId: number;
+  timestamp: Date;
   description: string;
   userId: string;
 }
 
 interface GetRecordingParams {
-  id: string;
+  id: number;
 }
 
 // Starte eine neue Aufnahme
-export const recordingStart = api<StartRecordingParams>(
-  { method: "POST", path: "/recordings/start" },
-  async ({ channelId, initiatorId, participants }): Promise<{ recording: Recording }> => {
-    const session = await startRecordingImpl(channelId, initiatorId);
-    return { 
-      recording: {
-        id: session.id,
-        channelId: session.channelId,
-        startedAt: session.startTime,
-        initiatorId,
-        screenRecording: session.screenRecording,
-        participants: Array.from(session.participants).map(id => ({
-          userId: id.toString(),
-          audioLink: undefined,
-          screenLink: undefined
-        })),
-        highlights: [],
-        audioFiles: [],
-        screenFiles: [],
-        cloudLinks: {
-          audio: [],
-          screen: []
-        },
-        lastConfirmation: session.startTime,
-        startTime: session.startTime
-      }
+export const recordingStart = api(
+  { method: "POST" },
+  async (params: StartRecordingParams): Promise<{ recording: Recording }> => {
+    const result = await VoiceDB.queryRow<DBRecording>`
+      INSERT INTO recordings (channel_id, started_at, initiator_id, screen_recording)
+      VALUES (${params.channelId}, NOW(), ${params.initiatorId}, false)
+      RETURNING *
+    `;
+
+    if (!result) {
+      throw new Error("Fehler beim Erstellen der Aufnahme");
+    }
+
+    const recording: Recording = {
+      id: result.id,
+      channelId: result.channel_id,
+      startedAt: result.started_at,
+      endedAt: result.ended_at,
+      initiatorId: result.initiator_id,
+      screenRecording: result.screen_recording,
+      audioFiles: [],
+      screenFiles: [],
+      cloudLinks: {
+        audio: [],
+        screen: []
+      },
+      lastConfirmation: new Date(),
+      participants: [],
+      highlights: [],
+      startTime: result.started_at
     };
+
+    return { recording };
   }
 );
 
 // Stoppe eine Aufnahme
-export const recordingStop = api<StopRecordingParams>(
-  { method: "POST", path: "/recordings/:channelId/stop" },
-  async ({ channelId }): Promise<{ recording: Recording }> => {
-    const session = await stopRecordingImpl(channelId);
-    return {
-      recording: {
-        id: session.id,
-        channelId: session.channelId,
-        startedAt: session.startTime,
-        endedAt: new Date(),
-        initiatorId: session.initiatorId,
-        screenRecording: session.screenRecording,
-        participants: Array.from(session.participants).map(id => ({
-          userId: id.toString(),
-          audioLink: session.cloudLinks.audio.find(link => link.includes(id.toString())),
-          screenLink: session.cloudLinks.screen.find(link => link.includes(id.toString()))
-        })),
-        highlights: session.highlights.map(h => ({
-          id: h.id,
-          recordingId: session.id,
-          timestamp: h.timestamp,
-          description: h.description,
-          userId: h.userId,
-          createdBy: h.createdBy,
-          clipPath: h.clipPath
-        })),
-        audioFiles: session.audioFiles,
-        screenFiles: session.screenFiles,
-        cloudLinks: session.cloudLinks,
-        lastConfirmation: session.lastConfirmation,
-        startTime: session.startTime
-      }
+export const recordingStop = api(
+  { method: "POST" },
+  async (params: StopRecordingParams): Promise<{ recording: Recording }> => {
+    const result = await VoiceDB.queryRow<DBRecording>`
+      UPDATE recordings 
+      SET ended_at = NOW()
+      WHERE channel_id = ${params.channelId} AND ended_at IS NULL
+      RETURNING *
+    `;
+
+    if (!result) {
+      throw new Error("Keine aktive Aufnahme in diesem Channel");
+    }
+
+    // Fetch participants
+    const participants = await VoiceDB.query<DBParticipant>`
+      SELECT * FROM participants 
+      WHERE recording_id = ${result.id}
+    `;
+
+    const participantsList = [];
+    for await (const p of participants) {
+      participantsList.push({
+        userId: p.user_id,
+        audioLink: p.audio_link,
+        screenLink: p.screen_link
+      });
+    }
+
+    // Fetch highlights
+    const highlights = await VoiceDB.query<DBHighlight>`
+      SELECT * FROM highlights 
+      WHERE recording_id = ${result.id}
+    `;
+
+    const highlightsList = [];
+    for await (const h of highlights) {
+      highlightsList.push({
+        id: h.id,
+        recordingId: h.recording_id,
+        timestamp: h.timestamp,
+        description: h.description,
+        userId: h.user_id,
+        clipPath: h.clip_path
+      });
+    }
+
+    const recording: Recording = {
+      id: result.id,
+      channelId: result.channel_id,
+      startedAt: result.started_at,
+      endedAt: result.ended_at,
+      initiatorId: result.initiator_id,
+      screenRecording: result.screen_recording,
+      audioFiles: [],
+      screenFiles: [],
+      cloudLinks: {
+        audio: [],
+        screen: []
+      },
+      lastConfirmation: new Date(),
+      participants: participantsList,
+      highlights: highlightsList,
+      startTime: result.started_at
     };
+
+    return { recording };
   }
 );
 
 // Toggle Screen Recording
-export const recordingToggleScreen = api<ToggleScreenParams>(
-  { method: "POST", path: "/recordings/:channelId/screen" },
-  async ({ channelId }): Promise<{ enabled: boolean }> => {
-    const enabled = await toggleScreenRecordingImpl(channelId);
-    return { enabled };
+export const recordingToggleScreen = api(
+  { method: "POST" },
+  async (params: ToggleScreenParams): Promise<{ enabled: boolean }> => {
+    const result = await VoiceDB.queryRow<DBRecording>`
+      UPDATE recordings 
+      SET screen_recording = NOT screen_recording
+      WHERE channel_id = ${params.channelId} AND ended_at IS NULL
+      RETURNING screen_recording
+    `;
+
+    if (!result) {
+      throw new Error("Keine aktive Aufnahme in diesem Channel");
+    }
+
+    return { enabled: result.screen_recording };
   }
 );
 
 // Füge einen Highlight hinzu
-export const recordingAddHighlight = api<AddHighlightParams>(
-  { method: "POST", path: "/recordings/:channelId/highlights" },
-  async ({ channelId, description, userId }): Promise<{ highlight: { 
-    id: number;
-    timestamp: Date;
-    description: string;
-    createdBy: string;
-    clipLink?: string;
-  } }> => {
-    const highlight = await addHighlightImpl(channelId, description, userId);
-    return {
-      highlight: {
-        id: 0, // Wird in der Datenbank generiert
-        timestamp: highlight.timestamp,
-        description: highlight.description,
-        createdBy: highlight.createdBy,
-        clipLink: highlight.clipPath
-      }
+export const recordingAddHighlight = api(
+  { method: "POST" },
+  async (params: AddHighlightParams): Promise<{ highlight: Highlight }> => {
+    const result = await VoiceDB.queryRow<DBHighlight>`
+      INSERT INTO highlights (recording_id, timestamp, description, user_id)
+      VALUES (${params.recordingId}, ${params.timestamp}, ${params.description}, ${params.userId})
+      RETURNING *
+    `;
+
+    if (!result) {
+      throw new Error("Fehler beim Erstellen des Highlights");
+    }
+
+    const highlight: Highlight = {
+      id: result.id,
+      recordingId: result.recording_id,
+      timestamp: result.timestamp,
+      description: result.description,
+      userId: result.user_id,
+      clipPath: result.clip_path
     };
+
+    return { highlight };
   }
 );
 
@@ -212,8 +267,8 @@ export const getRecording = api(
     const participantsResult = await VoiceDB.query<DBParticipant>`
       SELECT 
         user_id,
-        cloud_audio_link,
-        cloud_screen_link
+        audio_link,
+        screen_link
       FROM recording_participants
       WHERE recording_id = ${result.id}
     `;
@@ -222,8 +277,8 @@ export const getRecording = api(
     for await (const p of participantsResult) {
       participants.push({
         userId: p.user_id,
-        audioLink: p.cloud_audio_link,
-        screenLink: p.cloud_screen_link
+        audioLink: p.audio_link,
+        screenLink: p.screen_link
       });
     }
 
@@ -242,8 +297,7 @@ export const getRecording = api(
         timestamp: h.timestamp,
         description: h.description,
         userId: h.user_id,
-        createdBy: h.user_id,
-        clipPath: h.cloud_clip_link
+        clipPath: h.clip_path
       });
     }
 
