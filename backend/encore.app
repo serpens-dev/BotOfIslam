@@ -3,7 +3,8 @@
 	"lang": "typescript",
 	"build": {
 		"docker": {
-			"bundle_source": true
+			"bundle_source": true,
+			"dockerfile": "./Dockerfile"
 		}
 	}
 }
