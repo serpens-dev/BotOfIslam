@@ -1,5 +1,5 @@
 import { api } from "encore.dev/api";
-import { VoiceDB } from "./service";
+import { VoiceDB } from "./encore.service";
 
 // API Typen
 interface Recording {
