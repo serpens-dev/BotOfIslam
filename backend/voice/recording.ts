@@ -49,13 +49,17 @@ const activeRecordings = new Map<string, Recording>();
 
 export async function startRecording(channelId: string, initiatorId: string): Promise<Recording> {
   try {
+    log.info("Starte Aufnahmeprozess...");
+    
     // Get voice channel
     const channel = await fetchVoiceChannel(channelId);
     if (!channel) {
       throw new Error("Voice Channel nicht gefunden");
     }
+    log.info("Voice Channel gefunden", { channelId: channel.id, name: channel.name });
 
     // Join voice channel
+    log.info("Versuche dem Voice Channel beizutreten...");
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
@@ -67,8 +71,10 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
     if (!connection) {
       throw new Error("Konnte dem Voice Channel nicht beitreten");
     }
+    log.info("Erfolgreich dem Voice Channel beigetreten");
 
     // Create new recording in database
+    log.info("Erstelle Aufnahme in Datenbank...");
     const result = await VoiceDB.queryRow<{ id: number }>`
       INSERT INTO recordings (channel_id, initiator_id, started_at)
       VALUES (${channelId}, ${initiatorId}, NOW())
@@ -78,6 +84,7 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
     if (!result) {
       throw new Error("Fehler beim Erstellen der Aufnahme");
     }
+    log.info("Aufnahme in Datenbank erstellt", { recordingId: result.id });
 
     // Initialize recording session
     const recording: Recording = {
@@ -100,22 +107,27 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
 
     // Save to active recordings
     activeRecordings.set(channelId, recording);
+    log.info("Recording-Session initialisiert");
 
     // Start audio recording
+    log.info("Starte Audio-Aufnahme...");
     await startAudioRecording(connection, recording.id.toString());
+    log.info("Audio-Aufnahme gestartet");
 
     // Update channel name to show recording status
     await channel.setName(`🎙️ ${channel.name}`);
+    log.info("Channel-Name aktualisiert");
 
     return recording;
   } catch (error) {
     // If something goes wrong, clean up
+    log.error("Fehler beim Starten der Aufnahme:", error);
     const connection = getVoiceConnection(channelId);
     if (connection) {
       connection.destroy();
+      log.info("Voice-Verbindung getrennt nach Fehler");
     }
     activeRecordings.delete(channelId);
-    log.error("Fehler beim Starten der Aufnahme:", error);
     throw error;
   }
 }
