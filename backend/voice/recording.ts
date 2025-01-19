@@ -126,13 +126,13 @@ export async function stopRecording(channelId: string): Promise<Recording> {
 }
 
 export async function toggleScreenRecording(channelId: string): Promise<boolean> {
-  const recording = activeRecordings.get(channelId);
-  if (!recording) {
+  const session = activeRecordings.get(channelId);
+  if (!session) {
     throw new Error("Keine aktive Aufnahme in diesem Channel");
   }
 
-  recording.screenRecording = !recording.screenRecording;
-  return recording.screenRecording;
+  session.screenRecording = !session.screenRecording;
+  return session.screenRecording;
 }
 
 export async function addHighlight(channelId: string, description: string, userId: string): Promise<Highlight> {

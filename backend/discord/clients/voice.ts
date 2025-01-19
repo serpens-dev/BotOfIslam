@@ -1,47 +1,22 @@
 import { voice } from "~encore/clients";
+import { Recording, Highlight } from "../../voice/types";
 
-export interface Recording {
-  id: number;
-  channelId: string;
-  startedAt: Date;
-  endedAt?: Date;
-  initiatorId: string;
-  screenRecording: boolean;
-  participants: Array<{
-    userId: string;
-    audioLink?: string;
-    screenLink?: string;
-  }>;
-  highlights: Array<{
-    id: number;
-    timestamp: Date;
-    description: string;
-    createdBy: string;
-    clipLink?: string;
-  }>;
+// Starte eine neue Aufnahme
+export async function startRecording(channelId: string, initiatorId: string): Promise<{ recording: Recording }> {
+  return voice.startRecording({ channelId, initiatorId });
 }
 
-export interface Highlight {
-  id: number;
-  timestamp: Date;
-  description: string;
-  createdBy: string;
-  clipLink?: string;
-}
-
-// Wrapper-Funktionen für einfachere Verwendung
-export async function startRecording(channelId: string, initiatorId: string, participants?: string[]): Promise<{ recording: Recording }> {
-  return await voice.startRecording({ channelId, initiatorId, participants });
-}
-
+// Stoppe eine Aufnahme
 export async function stopRecording(channelId: string): Promise<{ recording: Recording }> {
-  return await voice.stopRecording({ channelId });
+  return voice.stopRecording({ channelId });
 }
 
+// Toggle Screen Recording
 export async function toggleScreenRecording(channelId: string): Promise<{ enabled: boolean }> {
-  return await voice.toggleScreen({ channelId });
+  return voice.toggleScreen({ channelId });
 }
 
+// Füge einen Highlight hinzu
 export async function addHighlight(channelId: string, description: string, userId: string): Promise<{ highlight: Highlight }> {
-  return await voice.addHighlight({ channelId, description, userId });
+  return voice.addHighlight({ channelId, description, userId });
 } 
