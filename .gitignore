@@ -1,0 +1,12 @@
+encore.gen.go
+encore.gen.cue
+/.encore
+node_modules
+/encore.gen
+das.log
+ideen.md
+voice_of_islam.png
+.cursorrules
+.env
+config.ts
+voice_of_islam.png
