@@ -4,7 +4,8 @@ import {
   GuildMember, 
   ChannelType,
   VoiceState,
-  Guild
+  Guild,
+  Message
 } from 'discord.js';
 import {
   joinVoiceChannel,
@@ -47,6 +48,9 @@ interface RecordingSession {
 
 const activeRecordings = new Map<string, Recording>();
 
+// Speichere die "Starte Aufnahme..." Nachrichten
+const startMessages = new Map<string, Message>();
+
 export async function startRecording(channelId: string, initiatorId: string): Promise<Recording> {
   try {
     log.info("Starte Aufnahmeprozess...");
@@ -57,6 +61,10 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
       throw new Error("Voice Channel nicht gefunden");
     }
     log.info("Voice Channel gefunden", { channelId: channel.id, name: channel.name });
+
+    // Sende initiale Nachricht
+    const startMsg = await channel.send("Starte Aufnahme...");
+    startMessages.set(channelId, startMsg);
 
     // Join voice channel
     log.info("Versuche dem Voice Channel beizutreten...");
@@ -118,6 +126,22 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
     await channel.setName(`🎙️ ${channel.name}`);
     log.info("Channel-Name aktualisiert");
 
+    // Update message after successful start
+    await startMsg.edit("✅ Aufnahme läuft!");
+    
+    // Setup voice state update handler
+    client.on('voiceStateUpdate', async (oldState: VoiceState, newState: VoiceState) => {
+      // Wenn es der Bot ist und er den Channel verlässt
+      if (newState.member?.user.id === client.user?.id && oldState.channelId && !newState.channelId) {
+        log.info("Bot hat den Voice Channel verlassen, beende Aufnahme...");
+        try {
+          await stopRecording(oldState.channelId);
+        } catch (error) {
+          log.error("Fehler beim automatischen Beenden der Aufnahme:", error);
+        }
+      }
+    });
+
     return recording;
   } catch (error) {
     // If something goes wrong, clean up
@@ -126,6 +150,12 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
     if (connection) {
       connection.destroy();
       log.info("Voice-Verbindung getrennt nach Fehler");
+    }
+    // Lösche die Start-Nachricht bei Fehler
+    const startMsg = startMessages.get(channelId);
+    if (startMsg) {
+      await startMsg.edit("❌ Fehler beim Starten der Aufnahme!");
+      startMessages.delete(channelId);
     }
     activeRecordings.delete(channelId);
     throw error;
@@ -139,6 +169,13 @@ export async function stopRecording(channelId: string): Promise<Recording> {
   }
 
   try {
+    // Delete start message if it exists
+    const startMsg = startMessages.get(channelId);
+    if (startMsg) {
+      await startMsg.delete().catch(() => {});
+      startMessages.delete(channelId);
+    }
+
     // Get voice channel for notifications
     const channel = await fetchVoiceChannel(channelId);
     if (!channel) {
