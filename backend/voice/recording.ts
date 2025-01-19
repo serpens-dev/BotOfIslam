@@ -3,14 +3,16 @@ import {
   TextChannel, 
   GuildMember, 
   ChannelType,
-  VoiceState
+  VoiceState,
+  Guild
 } from 'discord.js';
 import {
   joinVoiceChannel,
   VoiceConnection,
   getVoiceConnection,
   createAudioPlayer,
-  createAudioResource
+  createAudioResource,
+  DiscordGatewayAdapterCreator
 } from '@discordjs/voice';
 import { join } from 'path';
 import { createWriteStream } from 'fs';
@@ -57,7 +59,7 @@ export async function startRecording(channelId: string, initiatorId: string): Pr
     const connection = joinVoiceChannel({
       channelId: channel.id,
       guildId: channel.guild.id,
-      adapterCreator: channel.guild.voiceAdapterCreator,
+      adapterCreator: channel.guild.voiceAdapterCreator as DiscordGatewayAdapterCreator,
       selfDeaf: false,
       selfMute: false
     });
