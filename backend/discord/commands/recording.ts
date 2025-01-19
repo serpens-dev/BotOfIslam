@@ -98,8 +98,17 @@ export async function handleStopRecordCommand(interaction: ChatInputCommandInter
       return;
     }
 
-    // Stoppe Aufnahme
+    // Stoppe Aufnahme und warte auf Upload
+    await interaction.editReply('Stoppe Aufnahme und lade Dateien hoch...');
     const { recording } = await voice.stopRecording({ channelId: voiceChannel.id });
+    
+    // Warte einen Moment um sicherzustellen, dass die Links verfügbar sind
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    if (!recording.cloudLinks?.audio?.length) {
+      await interaction.editReply('Keine Audiodateien wurden aufgenommen.');
+      return;
+    }
     
     // Formatiere Links für die Ausgabe
     const audioLinks = recording.cloudLinks.audio.map((link: string, i: number) => 
@@ -113,19 +122,20 @@ export async function handleStopRecordCommand(interaction: ChatInputCommandInter
       : '';
 
     // Sende Erfolg in den Channel
-    await voiceChannel.send('⏹️ Aufnahme beendet!');
+    await voiceChannel.send({
+      content: '⏹️ Aufnahme beendet!'
+    });
     
-    // Sende Links als Follow-up
+    // Sende Links als separierte Nachricht
     await interaction.editReply({
-      content: `Aufnahme beendet!\n\nAudio Aufnahmen:\n${audioLinks}${screenLinks}`
+      content: '📼 Audio Aufnahmen:\n' + audioLinks + screenLinks
     });
 
   } catch (error: any) {
     log.error('Fehler beim Stoppen der Aufnahme:', error);
     
-    // Versuche Fehlermeldung zu senden
     try {
-      await interaction.editReply('Aufnahme konnte nicht gestoppt werden');
+      await interaction.editReply('❌ Fehler beim Stoppen der Aufnahme');
     } catch (e) {
       log.error('Fehler beim Senden der Fehlermeldung:', e);
     }
@@ -141,7 +151,7 @@ export async function handleScreenCommand(interaction: ChatInputCommandInteracti
     const voiceChannel = member.voice.channel;
 
     if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
-      await interaction.editReply('Du musst in einem Voice Channel sein um Screen Recording zu aktivieren.');
+      await interaction.editReply('Du musst in einem Voice Channel sein um Recording zu aktivieren.');
       return;
     }
 

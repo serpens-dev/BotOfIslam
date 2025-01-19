@@ -77,12 +77,9 @@ class MegaStorageClient {
     }
 
     try {
-      // Prüfe ob Datei existiert und warte auf Fertigstellung
+      // Prüfe ob Datei existiert
       await fsPromises.access(localPath);
       
-      // Warte länger um sicherzustellen, dass die Datei vollständig geschrieben wurde
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
       // Erstelle Upload Pfad (immer mit Forward Slashes)
       const uploadPath = join(this.uploadFolder, remoteName).split(/[\\/]/).join('/').replace(/^\//, '');
       
@@ -100,12 +97,25 @@ class MegaStorageClient {
 
       // Upload mit Retry-Logik
       const file = await this.retryOperation(async () => {
-        // Lese die gesamte Datei in den Speicher
-        const fileContent = await fsPromises.readFile(localPath);
+        // Erstelle einen Readable Stream für die Datei
+        const fileStream = createReadStream(localPath);
         
-        // Upload Datei
-        const uploadResult = await this.storage.upload(localPath, uploadPath).complete;
-        
+        // Erstelle den Upload-Stream mit der korrekten Größe
+        const uploadStream = this.storage.upload({
+          name: uploadPath,
+          size: stats.size
+        });
+
+        // Pipe den File-Stream in den Upload-Stream und warte auf Abschluss
+        await new Promise((resolve, reject) => {
+          fileStream.on('error', reject);
+          uploadStream.on('error', reject);
+          fileStream.pipe(uploadStream as any);
+          uploadStream.on('complete', resolve);
+        });
+
+        // Hole das Upload-Ergebnis
+        const uploadResult = await uploadStream.complete;
         if (!uploadResult) {
           throw new Error('Upload fehlgeschlagen - keine Datei zurückgegeben');
         }
