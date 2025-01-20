@@ -11,11 +11,6 @@ export async function sendVideoNotification(
   feedUpdate: FeedUpdate
 ) {
   try {
-    if (!feedUpdate.feed.entry?.[0]) {
-      return;
-    }
-
-    const video = feedUpdate.feed.entry[0];
     const channel = client.channels.cache.get(YOUTUBE_NOTIFICATION_CHANNEL()) as TextChannel;
 
     if (!channel) {
@@ -23,8 +18,18 @@ export async function sendVideoNotification(
       return;
     }
 
+    // Erstelle einen schönen Embed für die Benachrichtigung
+    const embed = new EmbedBuilder()
+      .setColor('#FF0000') // YouTube Rot
+      .setTitle(feedUpdate.title)
+      .setDescription(feedUpdate.description)
+      .setURL(`https://www.youtube.com/watch?v=${feedUpdate.videoId}`)
+      .setTimestamp(new Date(feedUpdate.publishedAt))
+      .setFooter({ text: 'YouTube Benachrichtigung' });
+
     await channel.send({
-      content: `Neues Video von **${video.author.name}**: ${video.id}`
+      content: `🎥 Neues Video verfügbar!`,
+      embeds: [embed]
     });
 
   } catch (error) {

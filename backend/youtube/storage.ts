@@ -50,29 +50,44 @@ async function subscribeToChannel(channelId: string): Promise<void> {
 
 // WebSub Unsubscribe Funktion
 async function unsubscribeFromChannel(channelId: string): Promise<void> {
-  const formData = new URLSearchParams({
-    'hub.callback': CALLBACK_URL,
-    'hub.topic': `https://www.youtube.com/xml/feeds/videos.xml?channel_id=${channelId}`,
-    'hub.verify': 'sync',
-    'hub.mode': 'unsubscribe'
-  });
-
   try {
+    const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+    
+    log.info('Versuche WebSub Abmeldung:', { channelId, feedUrl });
+    
     const response = await fetch(HUB_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData.toString()
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        'hub.mode': 'unsubscribe',
+        'hub.topic': feedUrl,
+        'hub.callback': CALLBACK_URL,
+        'hub.verify': 'async'
+      })
     });
 
     if (!response.ok) {
-      throw new Error(`WebSub unsubscribe failed: ${response.statusText}`);
+      const text = await response.text();
+      throw new Error(`WebSub unsubscribe failed: ${response.status} ${text}`);
     }
 
-    log.info('Successfully unsubscribed from channel:', { channelId });
+    log.info('WebSub Abmeldung erfolgreich:', { channelId });
   } catch (error) {
-    log.error('Error unsubscribing from channel:', { channelId, error });
-    throw error;
+    // Log aber keine Exception werfen - der Kanal soll trotzdem entfernt werden
+    log.error('Fehler bei WebSub Abmeldung:', { 
+      channelId,
+      error: error instanceof Error ? error.message : 'Unbekannter Fehler'
+    });
   }
+
+  // Kanal aus der Liste entfernen
+  const channels = await loadChannels();
+  const updatedChannels = channels.filter(c => c.id !== channelId);
+  await saveChannels(updatedChannels);
+  
+  log.info('Kanal erfolgreich entfernt:', { channelId });
 }
 
 // Lädt die Kanäle aus der JSON Datei
@@ -175,9 +190,6 @@ export async function removeChannel(url: string): Promise<void> {
 
   // Erst vom WebSub Hub unsubscribe
   await unsubscribeFromChannel(channelId);
-  
-  channels.splice(index, 1);
-  await saveChannels(channels);
 }
 
 // Aktualisiert einen Kanal

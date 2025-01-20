@@ -29,9 +29,20 @@ export async function getChannelInfo(url: string) {
 
     log.info('Suche nach YouTube Kanal:', { username });
     
+    // Debug: API Key
+    const apiKey = API_KEY();
+    if (!apiKey) {
+      throw new Error('YouTube API Key ist nicht gesetzt');
+    }
+    log.info('API Key Status:', { 
+      length: apiKey.length,
+      start: apiKey.substring(0, 5),
+      end: apiKey.substring(apiKey.length - 5)
+    });
+
     // Suche nach dem Kanal
     const response = await youtube.search.list({
-      key: API_KEY(),
+      key: apiKey,
       part: ['snippet'],
       q: username,
       type: ['channel'],
@@ -68,14 +79,22 @@ export async function getChannelInfo(url: string) {
 export const webhook = api.raw(
   { 
     expose: true,
-    path: '/youtube/webhook',
+    path: '/api/youtube/webhook',
     method: '*'
   },
   async (req, res) => {
+    log.info('Webhook Anfrage erhalten:', { 
+      method: req.method,
+      url: req.url,
+      headers: req.headers
+    });
+
     // WebSub Verifizierung
     if (req.method === 'GET') {
       const url = new URL(req.url || '', 'http://localhost');
       const rawParams = Object.fromEntries(url.searchParams);
+      
+      log.info('WebSub Verifizierung:', rawParams);
       
       const params: WebSubVerification = {
         'hub.mode': rawParams['hub.mode'] as string,
@@ -87,6 +106,7 @@ export const webhook = api.raw(
       if (params['hub.mode'] === 'subscribe' || params['hub.mode'] === 'unsubscribe') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end(params['hub.challenge']);
+        log.info('WebSub Verifizierung erfolgreich:', params);
         return;
       }
     }
@@ -99,11 +119,16 @@ export const webhook = api.raw(
           chunks.push(chunk);
         }
         const data = Buffer.concat(chunks).toString();
+        log.info('Feed Update erhalten:', { data });
+        
         const feedUpdate = JSON.parse(data) as FeedUpdate;
         const client = getDiscordClient();
         
         if (client) {
           await sendVideoNotification(client, feedUpdate);
+          log.info('Video Benachrichtigung gesendet:', feedUpdate);
+        } else {
+          log.warn('Discord Client nicht verfügbar - keine Benachrichtigung gesendet');
         }
 
         res.writeHead(200);

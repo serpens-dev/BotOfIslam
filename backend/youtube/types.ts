@@ -30,9 +30,10 @@ export interface WebSubVerification {
 }
 
 export interface FeedUpdate {
-  channelId: string;
   videoId: string;
   title: string;
   description: string;
+  channelId: string;
   publishedAt: string;
+  thumbnailUrl: string;
 } 
