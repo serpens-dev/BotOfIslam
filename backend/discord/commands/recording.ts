@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import log from "encore.dev/log";
 import { voice } from "~encore/clients";
+import { Command } from './types';
 
 interface Recording {
   id: number;
@@ -26,28 +27,37 @@ interface Recording {
   };
 }
 
-export const recordingCommands = [
-  new SlashCommandBuilder()
-    .setName('record')
-    .setDescription('Startet eine neue Aufnahme'),
-
-  new SlashCommandBuilder()
-    .setName('stoprecord')
-    .setDescription('Stoppt die aktuelle Aufnahme'),
-
-  new SlashCommandBuilder()
-    .setName('screen')
-    .setDescription('Aktiviert/Deaktiviert Screen Recording'),
-
-  new SlashCommandBuilder()
-    .setName('highlight')
-    .setDescription('Markiert einen wichtigen Moment in der Aufnahme')
-    .addStringOption(option =>
-      option
-        .setName('description')
-        .setDescription('Beschreibung des Highlights')
-        .setRequired(true)
-    )
+export const recordingCommands: Command[] = [
+  {
+    data: new SlashCommandBuilder()
+      .setName('record')
+      .setDescription('Startet eine neue Aufnahme'),
+    execute: handleRecordCommand
+  },
+  {
+    data: new SlashCommandBuilder()
+      .setName('stoprecord')
+      .setDescription('Stoppt die aktuelle Aufnahme'),
+    execute: handleStopRecordCommand
+  },
+  {
+    data: new SlashCommandBuilder()
+      .setName('screen')
+      .setDescription('Aktiviert/Deaktiviert Screen Recording'),
+    execute: handleScreenCommand
+  },
+  {
+    data: new SlashCommandBuilder()
+      .setName('highlight')
+      .setDescription('Markiert einen wichtigen Moment in der Aufnahme')
+      .addStringOption(option =>
+        option
+          .setName('beschreibung')
+          .setDescription('Beschreibung des Highlights')
+          .setRequired(true)
+      ),
+    execute: handleHighlightCommand
+  }
 ];
 
 export async function handleRecordCommand(interaction: ChatInputCommandInteraction) {
@@ -187,7 +197,7 @@ export async function handleHighlightCommand(interaction: ChatInputCommandIntera
       return;
     }
 
-    const description = interaction.options.getString('description', true);
+    const description = interaction.options.getString('beschreibung', true);
 
     // Füge Highlight hinzu
     const { highlight } = await voice.addHighlight({ 

@@ -4,6 +4,7 @@ import { handleCommand } from './handlers/commandHandler';
 import { handleButton } from './handlers/buttonHandler';
 import { handleModal } from './handlers/modalHandler';
 import { recordingCommands } from './commands/recording';
+import { youtubeCommands } from './commands/youtube';
 import { DISCORD_BOT_TOKEN } from './config';
 import { initializeStorage } from '../voice/storage';
 import { handleMessage } from './handlers/messageHandler';
@@ -35,7 +36,10 @@ clientInstance.once(Events.ClientReady, async () => {
       throw new Error('Client application not ready');
     }
 
-    const commandData = recordingCommands.map(command => command.toJSON());
+    const commandData = [
+      ...recordingCommands.map(command => command.data.toJSON()),
+      ...youtubeCommands.map(command => command.data.toJSON())
+    ];
     await clientInstance.application.commands.set(commandData);
     log.info('Commands erfolgreich registriert!');
 

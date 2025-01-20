@@ -13,157 +13,33 @@ import {
   handleHighlightCommand 
 } from '../commands/recording';
 import { handleYoutubeCommand } from '../commands/youtube';
+import { recordingCommands } from '../commands/recording';
+import { youtubeCommands } from '../commands/youtube';
+
+const commands = [...recordingCommands, ...youtubeCommands];
 
 export async function handleCommand(interaction: ChatInputCommandInteraction) {
-  if (!interaction.isChatInputCommand()) return;
+  const command = commands.find(cmd => cmd.data.name === interaction.commandName);
+  
+  if (!command) {
+    log.error(`Kein Handler für Command "${interaction.commandName}" gefunden`);
+    return;
+  }
 
   try {
-    const command = interaction.commandName;
-    const member = interaction.member;
-
-    if (!member) {
-      await interaction.reply({ content: 'Fehler: Kein Mitglied gefunden.', ephemeral: true });
-      return;
-    }
-
-    switch (command) {
-      case 'points':
-        const points = await getPoints(member.user.id);
-        const embed = new EmbedBuilder()
-          .setTitle('Fitna Punkte')
-          .setDescription(`Du hast aktuell ${points} Fitna Punkte.`)
-          .setColor(0xff0000);
-        
-        await interaction.reply({ content: `Du hast aktuell ${points} Fitna Punkte.`, ephemeral: true });
-        break;
-
-      case 'addpoints':
-        const user = interaction.options.getUser('user');
-        const amount = interaction.options.getInteger('amount');
-        if (user && amount) {
-          await addPoints(user.id, amount);
-          await interaction.reply(`${amount} Punkte wurden ${user.username} hinzugefügt!`);
-        }
-        break;
-
-      case 'record':
-        await handleRecordCommand(interaction);
-        break;
-
-      case 'stoprecord':
-        await handleStopRecordCommand(interaction);
-        break;
-
-      case 'screen':
-        await handleScreenCommand(interaction);
-        break;
-
-      case 'highlight':
-        await handleHighlightCommand(interaction);
-        break;
-
-      case 'fitna':
-        const targetUser = interaction.options.getUser('user', true);
-        const reason = interaction.options.getString('grund');
-        const fitnaMember = interaction.member as GuildMember;
-
-        if (!await hasRequiredRole(fitnaMember)) {
-          await interaction.reply({
-            content: "Du brauchst die Vertrauenswürdig Rolle um Fitna-Punkte zu vergeben!",
-            ephemeral: true
-          });
-          return;
-        }
-
-        try {
-          await giveFitnaPoint(targetUser.id, interaction.user.id, reason || undefined);
-          await interaction.reply({
-            content: `${getRandomMessage()} ${targetUser} hat einen Fitna-Punkt von ${interaction.user} erhalten!${reason ? `\nGrund: ${reason}` : ''}`
-          });
-        } catch (error) {
-          if (error instanceof Error) {
-            await interaction.reply({
-              content: error.message,
-              ephemeral: true
-            });
-          }
-        }
-        break;
-
-      case 'fitnaleaderboard':
-        const timeframe = interaction.options.getString('zeitraum', true) as 'month' | 'all';
-        const guild = interaction.guild;
-        if (!guild) {
-          await interaction.reply({
-            content: 'Dieser Befehl kann nur auf einem Server verwendet werden!',
-            ephemeral: true
-          });
-          return;
-        }
-
-        try {
-          const embedData = await getDetailedLeaderboard(timeframe, Array.from(guild.members.cache.values()).map(m => m.user));
-          const embed: APIEmbed = {
-            ...embedData,
-            type: EmbedType.Rich
-          };
-          await interaction.reply({
-            embeds: [embed],
-            ephemeral: true
-          });
-        } catch (error) {
-          log.error('Fehler beim Erstellen des Leaderboards:', error);
-          await interaction.reply({
-            content: 'Es ist ein Fehler beim Erstellen des Leaderboards aufgetreten!',
-            ephemeral: true
-          });
-        }
-        break;
-
-      case 'mutetype':
-        try {
-          const muteType = interaction.options.getString('type', true) as MuteType;
-          
-          await db.exec`
-            INSERT INTO user_mute_preferences (user_id, preferred_mute_type)
-            VALUES (${interaction.user.id}, ${muteType})
-            ON CONFLICT (user_id) 
-            DO UPDATE SET preferred_mute_type = ${muteType}
-          `;
-
-          await interaction.reply({
-            content: `Deine bevorzugte Mute-Art wurde auf ${getMuteTypeDisplay(muteType)} gesetzt!`,
-            ephemeral: true
-          });
-        } catch (error) {
-          log.error('Fehler beim Setzen der Mute-Präferenz:', error);
-          await interaction.reply({
-            content: 'Es ist ein Fehler aufgetreten!',
-            ephemeral: true
-          });
-        }
-        break;
-
-      case 'youtube':
-        await handleYoutubeCommand(interaction);
-        break;
-
-      default:
-        log.warn('Unbekannter Command:', command);
-        break;
-    }
+    await command.execute(interaction);
   } catch (error) {
-    log.error("Error handling command:", { error });
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({
-        content: 'Ein Fehler ist aufgetreten beim Ausführen des Commands.',
-        ephemeral: true
-      });
+    log.error('Fehler beim Ausführen des Commands:', error);
+    
+    const reply = {
+      content: 'Es ist ein Fehler aufgetreten beim Ausführen des Commands.',
+      ephemeral: true
+    };
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(reply);
     } else {
-      await interaction.reply({
-        content: 'Ein Fehler ist aufgetreten beim Ausführen des Commands.',
-        ephemeral: true
-      });
+      await interaction.reply(reply);
     }
   }
 } 
