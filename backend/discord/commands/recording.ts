@@ -1,14 +1,8 @@
 import { 
   SlashCommandBuilder, 
-  CommandInteraction, 
   ChannelType,
   GuildMember,
-  ButtonBuilder,
-  ButtonStyle,
-  ActionRowBuilder,
-  VoiceChannel,
-  ChatInputCommandInteraction,
-  ApplicationCommandDataResolvable
+  ChatInputCommandInteraction
 } from 'discord.js';
 import log from "encore.dev/log";
 import { voice } from "~encore/clients";
