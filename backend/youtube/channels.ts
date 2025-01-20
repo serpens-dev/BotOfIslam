@@ -2,7 +2,7 @@ import { api } from "encore.dev/api";
 import { YouTubeChannel } from "./types";
 import fs from "fs/promises";
 import path from "path";
-import crypto from "crypto";
+import * as subscriptions from "./subscriptions";
 
 const CHANNELS_FILE = path.join(__dirname, "channels.json");
 
@@ -42,7 +42,8 @@ export const addChannel = api({
     channels.push(channel);
     await writeChannels(channels);
 
-    // TODO: Subscribe to WebSub
+    // Subscribe to WebSub
+    await subscriptions.subscribe(params.channelId);
     
     return channel;
 });
@@ -60,7 +61,8 @@ export const removeChannel = api({
 
     await writeChannels(newChannels);
     
-    // TODO: Unsubscribe from WebSub
+    // Unsubscribe from WebSub
+    await subscriptions.unsubscribe(params.channelId);
 });
 
 // List all channels

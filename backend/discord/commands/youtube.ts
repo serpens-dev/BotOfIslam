@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
 import { YouTubeChannel } from "../../youtube/types";
 import * as youtubeAPI from "../../youtube/channels";
 import * as youtubeDiscord from "../../youtube/discord";
+import { extractChannelId, getChannelInfo } from "../../youtube/utils";
 
 export const data = new SlashCommandBuilder()
     .setName("youtube")
@@ -48,17 +49,17 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             const url = interaction.options.getString("url", true);
             
             try {
-                // Extract channel ID from URL
-                const channelId = url.split("/").pop() ?? "";
-                const channelName = "TODO: Get channel name from URL";
+                // Extrahiere Channel ID und hole Kanal-Informationen
+                const channelId = extractChannelId(url);
+                const channelInfo = await getChannelInfo(channelId);
                 
                 await youtubeAPI.addChannel({
-                    channelId,
-                    name: channelName,
-                    url
+                    channelId: channelInfo.id,
+                    name: channelInfo.name,
+                    url: channelInfo.url
                 });
 
-                await interaction.editReply(`✅ Kanal ${channelName} wurde zur Überwachung hinzugefügt!`);
+                await interaction.editReply(`✅ Kanal **${channelInfo.name}** wurde zur Überwachung hinzugefügt!`);
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : "Unbekannter Fehler";
                 await interaction.editReply(`❌ Fehler: ${message}`);
@@ -80,7 +81,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 }
 
                 await youtubeAPI.removeChannel({ channelId: channel.id });
-                await interaction.editReply(`✅ Kanal ${channelName} wurde von der Überwachung entfernt!`);
+                await interaction.editReply(`✅ Kanal **${channelName}** wurde von der Überwachung entfernt!`);
             } catch (error: unknown) {
                 const message = error instanceof Error ? error.message : "Unbekannter Fehler";
                 await interaction.editReply(`❌ Fehler: ${message}`);
@@ -100,7 +101,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
                 }
 
                 const channelList = channels
-                    .map((c: YouTubeChannel) => `- ${c.name} (${c.url})`)
+                    .map((c: YouTubeChannel) => `- **${c.name}** (${c.url})`)
                     .join("\n");
 
                 await interaction.editReply(`📺 Überwachte Kanäle:\n${channelList}`);

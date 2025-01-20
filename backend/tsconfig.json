@@ -3,7 +3,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "types": [
-      "node"
+      "node",
+      "jest"
     ],
     "paths": {
       "~encore/*": [

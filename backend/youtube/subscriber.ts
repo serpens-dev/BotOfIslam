@@ -3,6 +3,8 @@ import { WebSubNotification } from "./types";
 import crypto from "crypto";
 import { XMLParser } from "fast-xml-parser";
 import { Query } from "encore.dev/api";
+import * as subscriptions from "./subscriptions";
+import * as discord from "./discord";
 
 const parser = new XMLParser({
     ignoreAttributes: false,
@@ -25,8 +27,12 @@ export const verify = api({
 }, async ({ channelId, mode, topic, challenge }: VerifyParams): Promise<string> => {
     // Verify the subscription
     if (mode === "subscribe") {
-        // TODO: Verify channelId and topic match our subscription
-        return challenge;
+        const subscription = await subscriptions.getSubscription(channelId);
+        
+        // Verify topic matches our subscription
+        if (subscription && subscription.topic === topic) {
+            return challenge;
+        }
     }
     return "";
 });
@@ -38,8 +44,20 @@ export const notify = api.raw({
     expose: true
 }, async (req, res) => {
     const channelId = req.url?.split("/").pop();
-    const signature = req.headers["x-hub-signature"];
-    
+    if (!channelId) {
+        res.writeHead(400);
+        res.end();
+        return;
+    }
+
+    // Get subscription for verification
+    const subscription = await subscriptions.getSubscription(channelId);
+    if (!subscription) {
+        res.writeHead(404);
+        res.end();
+        return;
+    }
+
     // Read the raw body
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
@@ -47,7 +65,13 @@ export const notify = api.raw({
     }
     const body = Buffer.concat(chunks);
 
-    // TODO: Verify signature with channel secret
+    // Verify signature
+    const signature = req.headers["x-hub-signature"];
+    if (!subscriptions.verifySignature(body, signature?.toString(), subscription.secret)) {
+        res.writeHead(403);
+        res.end();
+        return;
+    }
     
     // Parse XML feed
     const feed = parser.parse(body.toString());
@@ -68,7 +92,8 @@ export const notify = api.raw({
         videoId: entry.videoId
     };
 
-    // TODO: Send to Discord
+    // Send to Discord
+    await discord.sendNotification({ notification });
     
     res.writeHead(200);
     res.end();
