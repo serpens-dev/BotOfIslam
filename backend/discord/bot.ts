@@ -7,6 +7,7 @@ import { recordingCommands } from './commands/recording';
 import { DISCORD_BOT_TOKEN } from './config';
 import { initializeStorage } from '../voice/storage';
 import { handleMessage } from './handlers/messageHandler';
+import { initializeVoiceRecording } from '../voice/recording';
 
 let client: Client | null = null;
 
@@ -37,8 +38,12 @@ clientInstance.once(Events.ClientReady, async () => {
     const commandData = recordingCommands.map(command => command.toJSON());
     await clientInstance.application.commands.set(commandData);
     log.info('Commands erfolgreich registriert!');
+
+    // Initialisiere Voice Recording
+    await initializeVoiceRecording();
+    log.info('Voice Recording System initialisiert!');
   } catch (error) {
-    log.error('Fehler beim Registrieren der Commands:', error);
+    log.error('Fehler beim Initialisieren:', error);
   }
 });
 
@@ -71,6 +76,7 @@ export async function startBot() {
 
     // Login to Discord
     await clientInstance.login(DISCORD_BOT_TOKEN);
+    client = clientInstance; // Setze den globalen Client
     log.info("Bot started successfully");
   } catch (error) {
     log.error('Failed to start bot', error);
