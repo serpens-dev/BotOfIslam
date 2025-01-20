@@ -93,28 +93,50 @@ export async function saveChannels(channels: Channel[]): Promise<void> {
 
 // Extrahiert die Channel ID aus einer YouTube URL
 function extractChannelId(url: string): string {
-  const regex = /youtube\.com\/(channel|c|user)\/([^\/\?]+)/;
-  const match = url.match(regex);
-  if (!match) {
-    throw new Error('Ungültige YouTube Kanal URL');
+  // Entferne Protokoll und www wenn vorhanden
+  url = url.replace(/^(https?:\/\/)?(www\.)?/, '');
+  
+  // Verschiedene URL Formate
+  const patterns = [
+    // @username Format
+    /youtube\.com\/@([^\/\?]+)/,
+    // /channel/ID Format
+    /youtube\.com\/channel\/([^\/\?]+)/,
+    // /c/name Format
+    /youtube\.com\/c\/([^\/\?]+)/,
+    // /user/name Format
+    /youtube\.com\/user\/([^\/\?]+)/
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      return match[1];
+    }
   }
-  return match[2];
+
+  throw new Error('Ungültige YouTube Kanal URL. Unterstützte Formate:\n' +
+    '- https://youtube.com/@username\n' +
+    '- https://youtube.com/channel/ID\n' +
+    '- https://youtube.com/c/name\n' +
+    '- https://youtube.com/user/name');
 }
 
 // Fügt einen neuen Kanal hinzu
 export async function addChannel(url: string): Promise<Channel> {
   const channels = await loadChannels();
-  const channelId = extractChannelId(url);
-
+  
   // Prüfe ob Kanal bereits existiert
-  if (channels.some(c => c.id === channelId)) {
+  if (channels.some(c => c.url === url)) {
     throw new Error('Kanal bereits in der Überwachung');
   }
 
+  const channelId = extractChannelId(url);
+  
   const channel: Channel = {
     id: channelId,
-    url,
-    title: url, // TODO: Hole den echten Kanalnamen von der YouTube API
+    url: url,
+    title: channelId, // Später durch echten Kanalnamen ersetzen
     addedAt: new Date().toISOString(),
     addedBy: 'system'
   };
@@ -130,13 +152,15 @@ export async function addChannel(url: string): Promise<Channel> {
 }
 
 // Entfernt einen Kanal
-export async function removeChannel(channelId: string): Promise<void> {
+export async function removeChannel(url: string): Promise<void> {
   const channels = await loadChannels();
-  const index = channels.findIndex(c => c.id === channelId);
+  const index = channels.findIndex(c => c.url === url);
   
   if (index === -1) {
     throw new Error('Kanal nicht gefunden');
   }
+
+  const channelId = channels[index].id;
 
   // Erst vom WebSub Hub unsubscribe
   await unsubscribeFromChannel(channelId);
