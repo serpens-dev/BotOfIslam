@@ -2,7 +2,7 @@
   "name": "backend",
   "private": true,
   "version": "0.0.1",
-  "description": "Encore + Next Starter",
+  "description": "Encore Template",
   "license": "MPL-2.0",
   "type": "module",
   "devDependencies": {
