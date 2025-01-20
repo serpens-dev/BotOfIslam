@@ -13,9 +13,43 @@ import { loadChannels, saveChannels, addChannel, removeChannel } from './storage
 import { sendVideoNotification } from './notifications';
 import { getDiscordClient } from '../discord/bot';
 import { URL } from 'url';
+import { google } from 'googleapis';
 
-// Webhook Secret für HMAC Validierung
+// Secrets
 const WEBHOOK_SECRET = secret('YOUTUBE_WEBHOOK_SECRET');
+const API_KEY = secret('YOUTUBE_API_KEY');
+
+const youtube = google.youtube('v3');
+
+export async function getChannelInfo(url: string) {
+  try {
+    // Extrahiere username/custom URL aus der vollen URL
+    const username = url.split('/').pop()?.replace('@', '');
+    if (!username) throw new Error('Konnte keinen Kanalnamen aus der URL extrahieren');
+
+    // Suche nach dem Kanal
+    const response = await youtube.search.list({
+      key: API_KEY(),
+      part: ['snippet'],
+      q: username,
+      type: ['channel'],
+      maxResults: 1
+    });
+
+    const channel = response.data.items?.[0];
+    if (!channel?.id?.channelId) {
+      throw new Error('Kanal nicht gefunden');
+    }
+
+    return {
+      id: channel.id.channelId,
+      title: channel.snippet?.title || username
+    };
+  } catch (error) {
+    log.error('Fehler beim Abrufen der Channel-Info:', error);
+    throw new Error('Kanal konnte nicht gefunden werden. Bitte überprüfe die URL.');
+  }
+}
 
 // WebSub Endpoint
 export const webhook = api.raw(

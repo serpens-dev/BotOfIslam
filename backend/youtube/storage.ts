@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import log from 'encore.dev/log';
 import { Channel } from './types';
+import { getChannelInfo } from './api';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -131,18 +132,19 @@ export async function addChannel(url: string): Promise<Channel> {
     throw new Error('Kanal bereits in der Überwachung');
   }
 
-  const channelId = extractChannelId(url);
+  // Hole Channel Info von der YouTube API
+  const channelInfo = await getChannelInfo(url);
   
   const channel: Channel = {
-    id: channelId,
+    id: channelInfo.id,
     url: url,
-    title: channelId, // Später durch echten Kanalnamen ersetzen
+    title: channelInfo.title,
     addedAt: new Date().toISOString(),
     addedBy: 'system'
   };
 
   // Erst zum WebSub Hub subscriben
-  await subscribeToChannel(channelId);
+  await subscribeToChannel(channelInfo.id);
 
   // Dann den Kanal speichern
   channels.push(channel);
