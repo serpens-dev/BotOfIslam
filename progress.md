@@ -43,11 +43,19 @@
 - Highlight Compilation
 
 ## Geplante Features 📋
+- Automatische Video Updater(Youtube Upload Checker)
 - Permission System für Aufnahmen
 - Analytics Dashboard
 - Automatische Kategorisierung
 - Such-Funktion
 - Export Features
+- Social Media Video Downloader 🆕
+  - Automatischer Download von TikTok Videos
+  - Instagram Video/Reels Support
+  - YouTube Shorts Integration
+  - Direkte MP4 Konvertierung
+  - Automatische Antwort mit Video/Link
+  - Metadaten Extraktion
 
 ## Technische Verbesserungen 🛠
 - Microservice Architektur mit Encore

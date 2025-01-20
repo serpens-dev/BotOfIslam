@@ -6,6 +6,7 @@ import { handleModal } from './handlers/modalHandler';
 import { recordingCommands } from './commands/recording';
 import { DISCORD_BOT_TOKEN } from './config';
 import { initializeStorage } from '../voice/storage';
+import { handleMessage } from './handlers/messageHandler';
 
 // Client mit notwendigen Intents
 const client = new Client({
@@ -49,6 +50,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     log.error('Fehler beim Verarbeiten der Interaktion:', error);
   }
 });
+
+// Message Handler für Video-Downloads
+client.on(Events.MessageCreate, handleMessage);
 
 export async function startBot() {
   try {
