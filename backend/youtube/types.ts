@@ -1,39 +1,23 @@
-export interface Channel {
-  id: string;
-  url: string;
-  title: string;
-  addedAt: string;
-  addedBy: string;
+export interface YouTubeChannel {
+    id: string;
+    name: string;
+    url: string;
+    addedAt: Date;
+    lastVideoAt?: Date;
 }
 
-export interface AddChannelRequest {
-  url: string;
+export interface WebSubNotification {
+    feed: string;
+    title: string;
+    link: string;
+    published: Date;
+    author: string;
+    videoId: string;
 }
 
-export interface AddChannelResponse {
-  channel: Channel;
-}
-
-export interface RemoveChannelRequest {
-  url: string;
-}
-
-export interface ListChannelsResponse {
-  channels: Channel[];
-}
-
-export interface WebSubVerification {
-  'hub.mode': string;
-  'hub.topic': string;
-  'hub.challenge': string;
-  'hub.lease_seconds'?: string;
-}
-
-export interface FeedUpdate {
-  videoId: string;
-  title: string;
-  description: string;
-  channelId: string;
-  publishedAt: string;
-  thumbnailUrl: string;
+export interface ChannelSubscription {
+    channelId: string;
+    topic: string;
+    lease: Date;
+    secret: string;
 } 

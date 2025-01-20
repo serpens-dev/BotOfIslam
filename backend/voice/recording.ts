@@ -19,7 +19,7 @@ import { join } from 'path';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import log from "encore.dev/log";
-import { getDiscordClient } from '../discord/bot';
+import { client } from '../discord/bot';
 import { startAudioRecording, stopAudioRecording } from './audioRecorder';
 import { getStorage } from './storage';
 import { VoiceDB } from './encore.service';
@@ -49,30 +49,21 @@ const activeRecordings = new Map<string, Recording>();
 // Speichere die "Starte Aufnahme..." Nachrichten
 const startMessages = new Map<string, Message>();
 
-// Initialisiere die Voice-Recording-Funktionalität
-export async function initializeVoiceRecording() {
-  const client = getDiscordClient();
-  if (!client) {
-    throw new Error('Discord client is not initialized');
-  }
-
-  client.on('voiceStateUpdate', async (oldState: VoiceState, newState: VoiceState) => {
-    // Wenn es der Bot ist und er den Channel verlässt
-    if (newState.member?.user.id === client.user?.id && oldState.channelId && !newState.channelId) {
-      log.info("Bot hat den Voice Channel verlassen, beende Aufnahme...");
-      try {
-        const recording = activeRecordings.get(oldState.channelId);
-        if (recording) {
-          await stopRecording(oldState.channelId);
-        }
-      } catch (error) {
-        log.error("Fehler beim automatischen Beenden der Aufnahme:", error);
+// Globaler Event-Handler (nur einmal registrieren)
+client.on('voiceStateUpdate', async (oldState: VoiceState, newState: VoiceState) => {
+  // Wenn es der Bot ist und er den Channel verlässt
+  if (newState.member?.user.id === client.user?.id && oldState.channelId && !newState.channelId) {
+    log.info("Bot hat den Voice Channel verlassen, beende Aufnahme...");
+    try {
+      const recording = activeRecordings.get(oldState.channelId);
+      if (recording) {
+        await stopRecording(oldState.channelId);
       }
+    } catch (error) {
+      log.error("Fehler beim automatischen Beenden der Aufnahme:", error);
     }
-  });
-
-  log.info("Voice Recording System initialisiert");
-}
+  }
+});
 
 export async function startRecording(channelId: string, initiatorId: string): Promise<Recording> {
   try {
@@ -370,10 +361,6 @@ async function startConfirmationTimer(channel: VoiceChannel) {
 }
 
 async function getVoiceChannel(channelId: string): Promise<VoiceChannel> {
-  const client = getDiscordClient();
-  if (!client) {
-    throw new Error('Discord client is not initialized');
-  }
   const channel = await client.channels.fetch(channelId);
   if (!channel || channel.type !== ChannelType.GuildVoice) {
     throw new Error('Channel nicht gefunden oder kein Voice Channel');

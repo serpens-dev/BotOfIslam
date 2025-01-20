@@ -1,97 +1,130 @@
-import { 
-  SlashCommandBuilder, 
-  ChatInputCommandInteraction
-} from 'discord.js';
-import log from "encore.dev/log";
-import { Channel } from '../../youtube/types';
-import { addChannel, removeChannel, loadChannels } from '../../youtube/storage';
-import { Command } from './types';
+import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
+import { YouTubeChannel } from "../../youtube/types";
+import * as youtubeAPI from "../../youtube/channels";
+import * as youtubeDiscord from "../../youtube/discord";
 
-export const youtubeCommands: Command[] = [
-  {
-    data: new SlashCommandBuilder()
-      .setName('youtube-add')
-      .setDescription('Fügt einen YouTube Kanal zur Überwachung hinzu')
-      .addStringOption(option =>
-        option
-          .setName('url')
-          .setDescription('Die URL des YouTube Kanals')
-          .setRequired(true)
-      ),
-    async execute(interaction: ChatInputCommandInteraction) {
-      try {
-        const url = interaction.options.getString('url', true);
-        await interaction.deferReply();
-        
-        const channel = await addChannel(url);
-        await interaction.editReply(`✅ YouTube Kanal \`${channel.title}\` wurde zur Überwachung hinzugefügt.`);
-      } catch (error) {
-        log.error('Fehler bei YouTube Add Command:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Ein unbekannter Fehler ist aufgetreten';
-        
-        if (interaction.deferred) {
-          await interaction.editReply(`❌ Fehler: ${errorMessage}`);
-        } else {
-          await interaction.reply(`❌ Fehler: ${errorMessage}`);
+export const data = new SlashCommandBuilder()
+    .setName("youtube")
+    .setDescription("Verwalte YouTube-Kanal Benachrichtigungen")
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName("add")
+            .setDescription("Füge einen YouTube-Kanal zur Überwachung hinzu")
+            .addStringOption(option =>
+                option
+                    .setName("url")
+                    .setDescription("Die URL des YouTube-Kanals")
+                    .setRequired(true)
+            )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName("remove")
+            .setDescription("Entferne einen YouTube-Kanal von der Überwachung")
+            .addStringOption(option =>
+                option
+                    .setName("channel")
+                    .setDescription("Der Name des Kanals")
+                    .setRequired(true)
+            )
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName("list")
+            .setDescription("Liste alle überwachten YouTube-Kanäle auf")
+    )
+    .addSubcommand(subcommand =>
+        subcommand
+            .setName("setchannel")
+            .setDescription("Setze den Discord-Kanal für Benachrichtigungen")
+    );
+
+export async function execute(interaction: ChatInputCommandInteraction) {
+    const subcommand = interaction.options.getSubcommand();
+
+    switch (subcommand) {
+        case "add": {
+            await interaction.deferReply();
+            const url = interaction.options.getString("url", true);
+            
+            try {
+                // Extract channel ID from URL
+                const channelId = url.split("/").pop() ?? "";
+                const channelName = "TODO: Get channel name from URL";
+                
+                await youtubeAPI.addChannel({
+                    channelId,
+                    name: channelName,
+                    url
+                });
+
+                await interaction.editReply(`✅ Kanal ${channelName} wurde zur Überwachung hinzugefügt!`);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+                await interaction.editReply(`❌ Fehler: ${message}`);
+            }
+            break;
         }
-      }
+
+        case "remove": {
+            await interaction.deferReply();
+            const channelName = interaction.options.getString("channel", true);
+            
+            try {
+                const channels = await youtubeAPI.listChannels();
+                const channel = channels.find((c: YouTubeChannel) => c.name === channelName);
+                
+                if (!channel) {
+                    await interaction.editReply("❌ Kanal nicht gefunden!");
+                    return;
+                }
+
+                await youtubeAPI.removeChannel({ channelId: channel.id });
+                await interaction.editReply(`✅ Kanal ${channelName} wurde von der Überwachung entfernt!`);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+                await interaction.editReply(`❌ Fehler: ${message}`);
+            }
+            break;
+        }
+
+        case "list": {
+            await interaction.deferReply();
+            
+            try {
+                const channels = await youtubeAPI.listChannels();
+                
+                if (channels.length === 0) {
+                    await interaction.editReply("Keine Kanäle in der Überwachung!");
+                    return;
+                }
+
+                const channelList = channels
+                    .map((c: YouTubeChannel) => `- ${c.name} (${c.url})`)
+                    .join("\n");
+
+                await interaction.editReply(`📺 Überwachte Kanäle:\n${channelList}`);
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+                await interaction.editReply(`❌ Fehler: ${message}`);
+            }
+            break;
+        }
+
+        case "setchannel": {
+            await interaction.deferReply();
+            
+            try {
+                await youtubeDiscord.setNotificationChannel({
+                    channelId: interaction.channelId
+                });
+
+                await interaction.editReply("✅ Dieser Kanal wird nun für YouTube-Benachrichtigungen verwendet!");
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+                await interaction.editReply(`❌ Fehler: ${message}`);
+            }
+            break;
+        }
     }
-  },
-  {
-    data: new SlashCommandBuilder()
-      .setName('youtube-remove')
-      .setDescription('Entfernt einen YouTube Kanal von der Überwachung')
-      .addStringOption(option =>
-        option
-          .setName('url')
-          .setDescription('Die URL des YouTube Kanals')
-          .setRequired(true)
-      ),
-    async execute(interaction: ChatInputCommandInteraction) {
-      try {
-        const url = interaction.options.getString('url', true);
-        await interaction.deferReply();
-        
-        await removeChannel(url);
-        await interaction.editReply('✅ YouTube Kanal wurde von der Überwachung entfernt.');
-      } catch (error) {
-        log.error('Fehler bei YouTube Remove Command:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Ein unbekannter Fehler ist aufgetreten';
-        
-        if (interaction.deferred) {
-          await interaction.editReply(`❌ Fehler: ${errorMessage}`);
-        } else {
-          await interaction.reply(`❌ Fehler: ${errorMessage}`);
-        }
-      }
-    }
-  },
-  {
-    data: new SlashCommandBuilder()
-      .setName('youtube-list')
-      .setDescription('Zeigt alle überwachten YouTube Kanäle an'),
-    async execute(interaction: ChatInputCommandInteraction) {
-      try {
-        await interaction.deferReply();
-        const channels = await loadChannels();
-        
-        if (channels.length === 0) {
-          await interaction.editReply('❌ Es werden aktuell keine YouTube Kanäle überwacht.');
-          return;
-        }
-        
-        const channelList = channels.map(c => `- ${c.title} (${c.url})`).join('\n');
-        await interaction.editReply(`📺 **Überwachte YouTube Kanäle:**\n${channelList}`);
-      } catch (error) {
-        log.error('Fehler bei YouTube List Command:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Ein unbekannter Fehler ist aufgetreten';
-        
-        if (interaction.deferred) {
-          await interaction.editReply(`❌ Fehler: ${errorMessage}`);
-        } else {
-          await interaction.reply(`❌ Fehler: ${errorMessage}`);
-        }
-      }
-    }
-  }
-]; 
+} 

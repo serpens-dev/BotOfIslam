@@ -3,20 +3,13 @@ import log from "encore.dev/log";
 import { handleCommand } from './handlers/commandHandler';
 import { handleButton } from './handlers/buttonHandler';
 import { handleModal } from './handlers/modalHandler';
-import { commands } from './commands';
+import { recordingCommands } from './commands/recording';
 import { DISCORD_BOT_TOKEN } from './config';
 import { initializeStorage } from '../voice/storage';
 import { handleMessage } from './handlers/messageHandler';
-import { initializeVoiceRecording } from '../voice/recording';
-
-let client: Client | null = null;
-
-export function getDiscordClient(): Client | null {
-  return client;
-}
 
 // Client mit notwendigen Intents
-const clientInstance = new Client({
+const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -26,29 +19,25 @@ const clientInstance = new Client({
 });
 
 // Bot Ready Event
-clientInstance.once(Events.ClientReady, async () => {
-  log.info(`Bot ist bereit als ${clientInstance.user?.tag}!`);
+client.once(Events.ClientReady, async () => {
+  log.info(`Bot ist bereit als ${client.user?.tag}!`);
 
   try {
     // Registriere Commands
-    if (!clientInstance.application) {
+    if (!client.application) {
       throw new Error('Client application not ready');
     }
 
-    const commandData = commands.map(command => command.data.toJSON());
-    await clientInstance.application.commands.set(commandData);
+    const commandData = recordingCommands.map(command => command.toJSON());
+    await client.application.commands.set(commandData);
     log.info('Commands erfolgreich registriert!');
-
-    // Initialisiere Voice Recording
-    await initializeVoiceRecording();
-    log.info('Voice Recording System initialisiert!');
   } catch (error) {
-    log.error('Fehler beim Initialisieren:', error);
+    log.error('Fehler beim Registrieren der Commands:', error);
   }
 });
 
 // Command Handler
-clientInstance.on(Events.InteractionCreate, async (interaction) => {
+client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
       await handleCommand(interaction);
@@ -63,7 +52,7 @@ clientInstance.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // Message Handler für Video-Downloads
-clientInstance.on(Events.MessageCreate, handleMessage);
+client.on(Events.MessageCreate, handleMessage);
 
 export async function startBot() {
   try {
@@ -75,8 +64,7 @@ export async function startBot() {
     });
 
     // Login to Discord
-    await clientInstance.login(DISCORD_BOT_TOKEN);
-    client = clientInstance; // Setze den globalen Client
+    await client.login(DISCORD_BOT_TOKEN);
     log.info("Bot started successfully");
   } catch (error) {
     log.error('Failed to start bot', error);
@@ -90,4 +78,4 @@ startBot().catch(error => {
   process.exit(1);
 });
 
-export { clientInstance }; 
+export { client }; 
