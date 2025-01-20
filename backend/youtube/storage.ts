@@ -1,7 +1,11 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import log from 'encore.dev/log';
 import { Channel } from './types';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const CHANNELS_FILE = path.join(__dirname, 'channels.json');
 const HUB_URL = 'https://pubsubhubbub.appspot.com/subscribe';
