@@ -12,6 +12,7 @@ import {
   handleScreenCommand, 
   handleHighlightCommand 
 } from '../commands/recording';
+import { handleYoutubeCommand } from '../commands/youtube';
 
 export async function handleCommand(interaction: ChatInputCommandInteraction) {
   if (!interaction.isChatInputCommand()) return;
@@ -141,6 +142,10 @@ export async function handleCommand(interaction: ChatInputCommandInteraction) {
             ephemeral: true
           });
         }
+        break;
+
+      case 'youtube':
+        await handleYoutubeCommand(interaction);
         break;
 
       default:

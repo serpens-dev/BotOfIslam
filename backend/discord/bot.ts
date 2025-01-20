@@ -8,8 +8,14 @@ import { DISCORD_BOT_TOKEN } from './config';
 import { initializeStorage } from '../voice/storage';
 import { handleMessage } from './handlers/messageHandler';
 
+let client: Client | null = null;
+
+export function getDiscordClient(): Client | null {
+  return client;
+}
+
 // Client mit notwendigen Intents
-const client = new Client({
+const clientInstance = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -19,17 +25,17 @@ const client = new Client({
 });
 
 // Bot Ready Event
-client.once(Events.ClientReady, async () => {
-  log.info(`Bot ist bereit als ${client.user?.tag}!`);
+clientInstance.once(Events.ClientReady, async () => {
+  log.info(`Bot ist bereit als ${clientInstance.user?.tag}!`);
 
   try {
     // Registriere Commands
-    if (!client.application) {
+    if (!clientInstance.application) {
       throw new Error('Client application not ready');
     }
 
     const commandData = recordingCommands.map(command => command.toJSON());
-    await client.application.commands.set(commandData);
+    await clientInstance.application.commands.set(commandData);
     log.info('Commands erfolgreich registriert!');
   } catch (error) {
     log.error('Fehler beim Registrieren der Commands:', error);
@@ -37,7 +43,7 @@ client.once(Events.ClientReady, async () => {
 });
 
 // Command Handler
-client.on(Events.InteractionCreate, async (interaction) => {
+clientInstance.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
       await handleCommand(interaction);
@@ -52,7 +58,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // Message Handler für Video-Downloads
-client.on(Events.MessageCreate, handleMessage);
+clientInstance.on(Events.MessageCreate, handleMessage);
 
 export async function startBot() {
   try {
@@ -64,7 +70,7 @@ export async function startBot() {
     });
 
     // Login to Discord
-    await client.login(DISCORD_BOT_TOKEN);
+    await clientInstance.login(DISCORD_BOT_TOKEN);
     log.info("Bot started successfully");
   } catch (error) {
     log.error('Failed to start bot', error);
@@ -78,4 +84,4 @@ startBot().catch(error => {
   process.exit(1);
 });
 
-export { client }; 
+export { clientInstance }; 
