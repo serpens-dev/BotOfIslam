@@ -1,5 +1,4 @@
 import { Service } from 'encore.dev/service';
 
-const service = new Service('youtube');
-
-export default service; 
+// Einfacher Service ohne zusätzliche Konfiguration
+export default new Service('youtube'); 

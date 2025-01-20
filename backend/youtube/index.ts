@@ -1,3 +1,8 @@
-import * as api from './api';
+import { add, remove, list } from './api';
 
-export const youtube = api; 
+// Export für Encore Client
+export default {
+  add,
+  remove,
+  list
+}; 
