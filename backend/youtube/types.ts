@@ -2,7 +2,6 @@ export interface Channel {
   id: string;
   url: string;
   title: string;
-  lastVideoId?: string;
   addedAt: string;
   addedBy: string;
 }
@@ -16,7 +15,7 @@ export interface AddChannelResponse {
 }
 
 export interface RemoveChannelRequest {
-  channelId: string;
+  url: string;
 }
 
 export interface ListChannelsResponse {
@@ -31,16 +30,9 @@ export interface WebSubVerification {
 }
 
 export interface FeedUpdate {
-  feed: {
-    entry?: {
-      id: string;
-      title: string;
-      author: {
-        name: string;
-        uri: string;
-      };
-      published: string;
-      updated: string;
-    }[];
-  };
+  channelId: string;
+  videoId: string;
+  title: string;
+  description: string;
+  publishedAt: string;
 } 

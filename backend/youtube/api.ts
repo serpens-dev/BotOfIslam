@@ -27,6 +27,8 @@ export async function getChannelInfo(url: string) {
     const username = url.split('/').pop()?.replace('@', '');
     if (!username) throw new Error('Konnte keinen Kanalnamen aus der URL extrahieren');
 
+    log.info('Suche nach YouTube Kanal:', { username });
+    
     // Suche nach dem Kanal
     const response = await youtube.search.list({
       key: API_KEY(),
@@ -34,6 +36,11 @@ export async function getChannelInfo(url: string) {
       q: username,
       type: ['channel'],
       maxResults: 1
+    });
+
+    log.info('YouTube API Antwort:', { 
+      status: response.status,
+      items: response.data.items?.length
     });
 
     const channel = response.data.items?.[0];
@@ -45,8 +52,14 @@ export async function getChannelInfo(url: string) {
       id: channel.id.channelId,
       title: channel.snippet?.title || username
     };
-  } catch (error) {
+  } catch (error: any) {
     log.error('Fehler beim Abrufen der Channel-Info:', error);
+    
+    // Detailliertere Fehlermeldung
+    if (error.response?.data?.error?.message) {
+      throw new Error(`YouTube API Fehler: ${error.response.data.error.message}`);
+    }
+    
     throw new Error('Kanal konnte nicht gefunden werden. Bitte überprüfe die URL.');
   }
 }
@@ -116,7 +129,7 @@ export const add = api(
 export const remove = api(
   { method: 'POST' },
   async (req: RemoveChannelRequest): Promise<void> => {
-    await removeChannel(req.channelId);
+    await removeChannel(req.url);
   }
 );
 

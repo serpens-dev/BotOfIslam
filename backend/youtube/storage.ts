@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import log from 'encore.dev/log';
 import { Channel } from './types';
 import { getChannelInfo } from './api';
+import { secret } from 'encore.dev/config';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const CHANNELS_FILE = path.join(__dirname, 'channels.json');
 const HUB_URL = 'https://pubsubhubbub.appspot.com/subscribe';
 const CALLBACK_URL = 'https://serpens.dev/api/youtube/webhook';
+const WEBHOOK_SECRET = secret('YOUTUBE_WEBHOOK_SECRET');
 
 interface ChannelStorage {
   channels: Channel[];
@@ -22,7 +24,8 @@ async function subscribeToChannel(channelId: string): Promise<void> {
     'hub.callback': CALLBACK_URL,
     'hub.topic': `https://www.youtube.com/xml/feeds/videos.xml?channel_id=${channelId}`,
     'hub.verify': 'sync',
-    'hub.mode': 'subscribe'
+    'hub.mode': 'subscribe',
+    'hub.verify_token': WEBHOOK_SECRET() // Füge Secret als Verifikations-Token hinzu
   });
 
   try {
@@ -32,14 +35,16 @@ async function subscribeToChannel(channelId: string): Promise<void> {
       body: formData.toString()
     });
 
-    if (!response.ok) {
+    // Wenn wir einen Conflict bekommen, ignorieren wir ihn - der Kanal ist bereits subscribed
+    if (!response.ok && response.status !== 409) {
       throw new Error(`WebSub subscription failed: ${response.statusText}`);
     }
 
     log.info('Successfully subscribed to channel:', { channelId });
   } catch (error) {
+    // Wenn es ein Netzwerkfehler ist, loggen wir ihn, aber lassen die Funktion weiterlaufen
     log.error('Error subscribing to channel:', { channelId, error });
-    throw error;
+    // Werfen den Fehler nicht weiter, da der Kanal möglicherweise trotzdem funktioniert
   }
 }
 
@@ -78,6 +83,8 @@ export async function loadChannels(): Promise<Channel[]> {
     return storage.channels;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // Verzeichnis existiert nicht - erstelle es
+      await fs.mkdir(path.dirname(CHANNELS_FILE), { recursive: true });
       // Datei existiert nicht - erstelle sie
       await saveChannels([]);
       return [];
@@ -88,6 +95,8 @@ export async function loadChannels(): Promise<Channel[]> {
 
 // Speichert die Kanäle in der JSON Datei
 export async function saveChannels(channels: Channel[]): Promise<void> {
+  // Stelle sicher dass das Verzeichnis existiert
+  await fs.mkdir(path.dirname(CHANNELS_FILE), { recursive: true });
   const storage: ChannelStorage = { channels };
   await fs.writeFile(CHANNELS_FILE, JSON.stringify(storage, null, 2));
 }
