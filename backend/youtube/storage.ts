@@ -4,9 +4,65 @@ import log from 'encore.dev/log';
 import { Channel } from './types';
 
 const CHANNELS_FILE = path.join(__dirname, 'channels.json');
+const HUB_URL = 'https://pubsubhubbub.appspot.com/subscribe';
+const CALLBACK_URL = 'https://serpens.dev/api/youtube/webhook';
 
 interface ChannelStorage {
   channels: Channel[];
+}
+
+// WebSub Subscription Funktion
+async function subscribeToChannel(channelId: string): Promise<void> {
+  const formData = new URLSearchParams({
+    'hub.callback': CALLBACK_URL,
+    'hub.topic': `https://www.youtube.com/xml/feeds/videos.xml?channel_id=${channelId}`,
+    'hub.verify': 'sync',
+    'hub.mode': 'subscribe'
+  });
+
+  try {
+    const response = await fetch(HUB_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData.toString()
+    });
+
+    if (!response.ok) {
+      throw new Error(`WebSub subscription failed: ${response.statusText}`);
+    }
+
+    log.info('Successfully subscribed to channel:', { channelId });
+  } catch (error) {
+    log.error('Error subscribing to channel:', { channelId, error });
+    throw error;
+  }
+}
+
+// WebSub Unsubscribe Funktion
+async function unsubscribeFromChannel(channelId: string): Promise<void> {
+  const formData = new URLSearchParams({
+    'hub.callback': CALLBACK_URL,
+    'hub.topic': `https://www.youtube.com/xml/feeds/videos.xml?channel_id=${channelId}`,
+    'hub.verify': 'sync',
+    'hub.mode': 'unsubscribe'
+  });
+
+  try {
+    const response = await fetch(HUB_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData.toString()
+    });
+
+    if (!response.ok) {
+      throw new Error(`WebSub unsubscribe failed: ${response.statusText}`);
+    }
+
+    log.info('Successfully unsubscribed from channel:', { channelId });
+  } catch (error) {
+    log.error('Error unsubscribing from channel:', { channelId, error });
+    throw error;
+  }
 }
 
 // Lädt die Kanäle aus der JSON Datei
@@ -59,11 +115,13 @@ export async function addChannel(url: string): Promise<Channel> {
     addedBy: 'system'
   };
 
+  // Erst zum WebSub Hub subscriben
+  await subscribeToChannel(channelId);
+
+  // Dann den Kanal speichern
   channels.push(channel);
   await saveChannels(channels);
   
-  // TODO: Subscribe zum WebSub Feed
-
   return channel;
 }
 
@@ -76,7 +134,8 @@ export async function removeChannel(channelId: string): Promise<void> {
     throw new Error('Kanal nicht gefunden');
   }
 
-  // TODO: Unsubscribe vom WebSub Feed
+  // Erst vom WebSub Hub unsubscribe
+  await unsubscribeFromChannel(channelId);
   
   channels.splice(index, 1);
   await saveChannels(channels);
